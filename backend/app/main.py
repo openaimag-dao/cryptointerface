@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
+    ai,
     backtesting,
     candles,
     chat,
@@ -97,7 +98,12 @@ app.include_router(open_interest.router)
 app.include_router(status.router)
 app.include_router(websocket.router)
 
-# Still mock this sprint (AI signals, portfolio, news, whales, liquidations, macro, backtesting, chat)
+# Sprint 3: deterministic AI Decision Engine (analysis only, no trade execution)
+app.include_router(ai.router)
+
+# Still mock this sprint (portfolio, news, whales, liquidations, macro, backtesting, chat).
+# signals.router is superseded by ai.router for AI analysis but stays mounted for now
+# since the frontend's other mock-data consumers haven't been migrated yet.
 app.include_router(signals.router)
 app.include_router(portfolio.router)
 app.include_router(news.router)

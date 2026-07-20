@@ -212,6 +212,17 @@ async def get_latest_funding(db: AsyncSession, symbol: str) -> FundingRate | Non
     return result.scalar_one_or_none()
 
 
+async def get_recent_funding_history(db: AsyncSession, symbol: str, limit: int = 20) -> list[FundingRate]:
+    """Most recent `limit` funding readings, ascending (oldest -> newest)."""
+    stmt = (
+        select(FundingRate).where(FundingRate.symbol == symbol).order_by(FundingRate.funding_time.desc()).limit(limit)
+    )
+    result = await db.execute(stmt)
+    rows = list(result.scalars().all())
+    rows.reverse()
+    return rows
+
+
 async def insert_open_interest(
     db: AsyncSession, symbol: str, open_interest: float, open_interest_value: float, timestamp: int
 ) -> None:
@@ -233,6 +244,17 @@ async def get_latest_open_interest(db: AsyncSession, symbol: str) -> OpenInteres
     stmt = select(OpenInterest).where(OpenInterest.symbol == symbol).order_by(OpenInterest.timestamp.desc()).limit(1)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
+
+
+async def get_recent_open_interest_history(db: AsyncSession, symbol: str, limit: int = 20) -> list[OpenInterest]:
+    """Most recent `limit` open-interest polls, ascending (oldest -> newest)."""
+    stmt = (
+        select(OpenInterest).where(OpenInterest.symbol == symbol).order_by(OpenInterest.timestamp.desc()).limit(limit)
+    )
+    result = await db.execute(stmt)
+    rows = list(result.scalars().all())
+    rows.reverse()
+    return rows
 
 
 async def upsert_indicator_value(db: AsyncSession, snapshot: IndicatorSnapshot) -> None:
