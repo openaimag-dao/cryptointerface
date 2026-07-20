@@ -22,12 +22,14 @@ export async function fetchAssets(): Promise<AssetQuote[]> {
   return assets.map(toAssetQuote);
 }
 
-export async function fetchAsset(symbol: string): Promise<AssetQuote | undefined> {
+export async function fetchAsset(symbol: string): Promise<AssetQuote | null> {
   try {
     const asset = await apiFetch<MarketAsset>(`/api/market/${symbol}`);
     return toAssetQuote(asset);
   } catch {
-    return undefined;
+    // TanStack Query forbids a queryFn resolving to `undefined` — `null`
+    // is the correct "no data yet" sentinel (e.g. symbol not seen yet).
+    return null;
   }
 }
 
