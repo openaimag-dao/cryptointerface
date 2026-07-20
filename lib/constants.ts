@@ -31,3 +31,11 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "AI Chat", href: "/ai-chat", icon: MessageSquareText },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
+
+// Primary Dashboard watchlist + chart symbol tabs. Must be a subset of the
+// backend's SYMBOLS env var (see backend/.env.example) or these cards will
+// show empty/loading state.
+export const WATCHLIST_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "LINKUSDT"];
+
+export const CHART_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
+export type ChartTimeframe = (typeof CHART_TIMEFRAMES)[number];

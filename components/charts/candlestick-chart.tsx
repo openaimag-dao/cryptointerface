@@ -7,19 +7,27 @@ import {
   createChart,
   HistogramSeries,
   type IChartApi,
+  type ISeriesApi,
   type UTCTimestamp,
 } from "lightweight-charts";
 
 import type { Candle } from "@/types";
+import { candleKey, useMarketStore } from "@/store/market-store";
 
 interface CandlestickChartProps {
   data: Candle[];
   height?: number;
+  /** When provided (with `interval`), the chart live-updates its last bar
+   * from the `/ws/market` feed without a refetch. */
+  symbol?: string;
+  interval?: string;
 }
 
-export function CandlestickChart({ data, height = 420 }: CandlestickChartProps) {
+export function CandlestickChart({ data, height = 420, symbol, interval }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -54,11 +62,13 @@ export function CandlestickChart({ data, height = 420 }: CandlestickChartProps) 
       wickUpColor: "#00e676",
       wickDownColor: "#ff3b5c",
     });
+    candleSeriesRef.current = candleSeries;
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
       priceScaleId: "volume",
     });
+    volumeSeriesRef.current = volumeSeries;
     volumeSeries.priceScale().applyOptions({
       scaleMargins: { top: 0.85, bottom: 0 },
     });
@@ -86,8 +96,41 @@ export function CandlestickChart({ data, height = 420 }: CandlestickChartProps) 
     return () => {
       chart.remove();
       chartRef.current = null;
+      candleSeriesRef.current = null;
+      volumeSeriesRef.current = null;
     };
   }, [data, height]);
+
+  useEffect(() => {
+    if (!symbol || !interval) return;
+
+    const key = candleKey(symbol, interval);
+    const unsubscribe = useMarketStore.subscribe(
+      (state) => state.candleUpdates[key],
+      (update) => {
+        if (!update) return;
+        const candleSeries = candleSeriesRef.current;
+        const volumeSeries = volumeSeriesRef.current;
+        if (!candleSeries || !volumeSeries) return;
+
+        const time = update.candle.time as UTCTimestamp;
+        candleSeries.update({
+          time,
+          open: update.candle.open,
+          high: update.candle.high,
+          low: update.candle.low,
+          close: update.candle.close,
+        });
+        volumeSeries.update({
+          time,
+          value: update.candle.volume,
+          color: update.candle.close >= update.candle.open ? "rgba(0,230,118,0.35)" : "rgba(255,59,92,0.35)",
+        });
+      },
+    );
+
+    return unsubscribe;
+  }, [symbol, interval]);
 
   return <div ref={containerRef} className="w-full" style={{ height }} />;
 }

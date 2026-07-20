@@ -4,7 +4,7 @@ import { useState } from "react";
 import { PlayCircle } from "lucide-react";
 
 import { BACKTEST_STRATEGIES } from "@/lib/mock/backtest";
-import { WATCHLIST_SYMBOLS } from "@/lib/mock/assets";
+import { WATCHLIST_SYMBOLS } from "@/lib/constants";
 import { formatPercent } from "@/lib/utils";
 import { useRunBacktest } from "@/hooks/use-backtest";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

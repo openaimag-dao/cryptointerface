@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { WATCHLIST_SYMBOLS, getMockAssetBySymbol } from "@/lib/mock/assets";
+import { CHART_TIMEFRAMES, WATCHLIST_SYMBOLS, type ChartTimeframe } from "@/lib/constants";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 import { useAsset, useCandles } from "@/hooks/use-market-data";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -10,19 +10,16 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CandlestickChart } from "@/components/charts/candlestick-chart";
 
-const TIMEFRAMES = ["15m", "1H", "4H", "1D"];
-
 interface PriceChartPanelProps {
   symbol: string;
   onSymbolChange: (symbol: string) => void;
 }
 
 export function PriceChartPanel({ symbol, onSymbolChange }: PriceChartPanelProps) {
-  const [timeframe, setTimeframe] = useState("1H");
+  const [timeframe, setTimeframe] = useState<ChartTimeframe>("1h");
 
   const { data: asset } = useAsset(symbol);
-  const basePrice = getMockAssetBySymbol(symbol)?.price ?? 64280;
-  const { data: candles, isLoading } = useCandles(symbol, basePrice);
+  const { data: candles, isLoading } = useCandles(symbol, timeframe);
 
   const isUp = (asset?.changePercent24h ?? 0) >= 0;
 
@@ -51,11 +48,11 @@ export function PriceChartPanel({ symbol, onSymbolChange }: PriceChartPanelProps
           ) : null}
         </div>
 
-        <Tabs value={timeframe} onValueChange={setTimeframe}>
+        <Tabs value={timeframe} onValueChange={(value) => setTimeframe(value as ChartTimeframe)}>
           <TabsList>
-            {TIMEFRAMES.map((tf) => (
+            {CHART_TIMEFRAMES.map((tf) => (
               <TabsTrigger key={tf} value={tf}>
-                {tf}
+                {tf.toUpperCase()}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -65,7 +62,7 @@ export function PriceChartPanel({ symbol, onSymbolChange }: PriceChartPanelProps
         {isLoading || !candles ? (
           <Skeleton className="h-[420px] w-full rounded-lg" />
         ) : (
-          <CandlestickChart data={candles} height={420} />
+          <CandlestickChart data={candles} height={420} symbol={symbol} interval={timeframe} />
         )}
       </CardContent>
     </Card>
