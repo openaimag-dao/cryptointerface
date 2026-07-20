@@ -1,109 +1,23 @@
-"""Mock data generators.
+"""Mock data generators for the endpoints that stay mock in Sprint 2
+(AI signals, portfolio, news, whales, liquidations, macro, backtesting, chat).
 
-Sprint 2 will replace these with real Binance market data calls and the AI
-reasoning engine. Endpoints in `app/routers` should keep the same response
-shapes so the frontend requires no changes when live data is wired in.
+Market data (assets, candles, funding, open interest, indicators) is now
+served from the real Binance-backed Data Engine — see `app/services` and
+`app/api/market.py`, `candles.py`, `indicators.py`, `funding.py`,
+`open_interest.py`.
 """
 
 import random
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from app.models.backtest import BacktestResult, EquityPoint
-from app.models.liquidation import LiquidationEvent, LiquidationHeatmapCell
-from app.models.macro import MacroEvent, MacroIndicator
-from app.models.market import AssetQuote, Candle, MarketOverview
-from app.models.news import NewsItem
-from app.models.portfolio import PortfolioSummary, Position, TradeHistoryItem
-from app.models.signal import AiAnalysis, AiSignal
-from app.models.whale import WhaleTransaction
-
-ASSET_SEEDS = [
-    {"symbol": "BTCUSDT", "name": "Bitcoin", "price": 64280.5, "ai_score": 76, "direction": "LONG"},
-    {"symbol": "ETHUSDT", "name": "Ethereum", "price": 3412.8, "ai_score": 54, "direction": "WAIT"},
-    {"symbol": "SOLUSDT", "name": "Solana", "price": 172.34, "ai_score": 88, "direction": "LONG"},
-    {"symbol": "LINKUSDT", "name": "Chainlink", "price": 18.62, "ai_score": 29, "direction": "SHORT"},
-    {"symbol": "BNBUSDT", "name": "BNB", "price": 592.1, "ai_score": 41, "direction": "WAIT"},
-    {"symbol": "XRPUSDT", "name": "XRP", "price": 0.612, "ai_score": 39, "direction": "WAIT"},
-    {"symbol": "AVAXUSDT", "name": "Avalanche", "price": 38.47, "ai_score": 62, "direction": "WAIT"},
-    {"symbol": "DOGEUSDT", "name": "Dogecoin", "price": 0.1523, "ai_score": 30, "direction": "SHORT"},
-    {"symbol": "ADAUSDT", "name": "Cardano", "price": 0.478, "ai_score": 56, "direction": "WAIT"},
-    {"symbol": "TONUSDT", "name": "Toncoin", "price": 6.94, "ai_score": 82, "direction": "LONG"},
-]
-
-WATCHLIST_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "LINKUSDT"]
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def get_assets() -> list[AssetQuote]:
-    assets = []
-    for seed in ASSET_SEEDS:
-        seed_hash = sum(ord(char) for char in seed["symbol"])
-        assets.append(
-            AssetQuote(
-                symbol=seed["symbol"],
-                name=seed["name"],
-                price=seed["price"],
-                change_percent_24h=round(((seed_hash % 900) - 450) / 40, 2),
-                volume_24h=80_000_000 + (seed_hash % 40) * 32_000_000,
-                funding_rate=round(((seed_hash % 40) - 20) / 1000, 5),
-                open_interest=200_000_000 + (seed_hash % 50) * 18_000_000,
-                ai_score=seed["ai_score"],
-                direction=seed["direction"],
-            )
-        )
-    return assets
-
-
-def get_asset(symbol: str) -> AssetQuote | None:
-    return next((asset for asset in get_assets() if asset.symbol == symbol), None)
-
-
-def get_market_overview() -> MarketOverview:
-    return MarketOverview(
-        fear_greed_index=62,
-        fear_greed_label="Greed",
-        btc_dominance=54.2,
-        avg_funding_rate=0.0086,
-        total_open_interest=38_400_000_000,
-        total_volume_24h=96_200_000_000,
-    )
-
-
-def get_candles(symbol: str, base_price: float, count: int = 180) -> list[Candle]:
-    rng = random.Random(sum(ord(char) for char in symbol))
-    candles: list[Candle] = []
-    price = base_price
-    now = int(time.time())
-    interval_seconds = 3600
-
-    for i in range(count, -1, -1):
-        candle_time = now - i * interval_seconds
-        volatility = base_price * 0.006
-        drift = (rng.random() - 0.48) * volatility
-        open_price = price
-        close_price = max(open_price + drift, base_price * 0.5)
-        high_price = max(open_price, close_price) + rng.random() * volatility * 0.6
-        low_price = min(open_price, close_price) - rng.random() * volatility * 0.6
-        volume = 1200 + rng.random() * 4200
-
-        candles.append(
-            Candle(
-                time=candle_time,
-                open=round(open_price, 2),
-                high=round(high_price, 2),
-                low=round(low_price, 2),
-                close=round(close_price, 2),
-                volume=round(volume, 2),
-            )
-        )
-        price = close_price
-
-    return candles
-
+from app.schemas.backtest import BacktestResult, EquityPoint
+from app.schemas.liquidation import LiquidationEvent, LiquidationHeatmapCell
+from app.schemas.macro import MacroEvent, MacroIndicator
+from app.schemas.news import NewsItem
+from app.schemas.portfolio import PortfolioSummary, Position, TradeHistoryItem
+from app.schemas.signal import AiAnalysis, AiSignal
+from app.schemas.whale import WhaleTransaction
 
 _SIGNAL_SEEDS = [
     {"symbol": "SOLUSDT", "direction": "LONG", "entry": 172.4, "confidence": 88},
@@ -154,7 +68,7 @@ def get_signals() -> list[AiSignal]:
                 take_profit_3=round(seed["entry"] + tp_multiplier * risk_unit * 4, 4),
                 risk_reward=round(2 + (index % 3), 1),
                 reasons=_REASON_POOL[direction][:3],
-                created_at=(datetime.now(timezone.utc) - timedelta(minutes=index * 37)).isoformat(),
+                created_at=(datetime.now(UTC) - timedelta(minutes=index * 37)).isoformat(),
                 timeframe=["15m", "1H", "4H"][index % 3],
             )
         )
@@ -195,7 +109,7 @@ def get_portfolio() -> PortfolioSummary:
             pnl=1293.8,
             pnl_percent=5.03,
             leverage=5,
-            opened_at=(datetime.now(timezone.utc) - timedelta(hours=26)).isoformat(),
+            opened_at=(datetime.now(UTC) - timedelta(hours=26)).isoformat(),
         ),
         Position(
             id="pos-2",
@@ -207,7 +121,7 @@ def get_portfolio() -> PortfolioSummary:
             pnl=918.1,
             pnl_percent=8.94,
             leverage=3,
-            opened_at=(datetime.now(timezone.utc) - timedelta(hours=9)).isoformat(),
+            opened_at=(datetime.now(UTC) - timedelta(hours=9)).isoformat(),
         ),
     ]
     history = [
@@ -219,8 +133,8 @@ def get_portfolio() -> PortfolioSummary:
             exit_price=3412.8,
             pnl=698.4,
             pnl_percent=7.32,
-            opened_at=(datetime.now(timezone.utc) - timedelta(hours=96)).isoformat(),
-            closed_at=(datetime.now(timezone.utc) - timedelta(hours=48)).isoformat(),
+            opened_at=(datetime.now(UTC) - timedelta(hours=96)).isoformat(),
+            closed_at=(datetime.now(UTC) - timedelta(hours=48)).isoformat(),
         ),
     ]
     total_pnl = sum(position.pnl for position in open_positions)
@@ -261,7 +175,7 @@ def get_news() -> list[NewsItem]:
             title=seed["title"],
             summary=seed["summary"],
             source=seed["source"],
-            published_at=(datetime.now(timezone.utc) - timedelta(minutes=index * 47)).isoformat(),
+            published_at=(datetime.now(UTC) - timedelta(minutes=index * 47)).isoformat(),
             sentiment=seed["sentiment"],
             tags=seed["tags"],
             url="#",
@@ -290,7 +204,7 @@ def get_whale_transactions(count: int = 24) -> list[WhaleTransaction]:
                 from_address=f"0x{(index * 291 + 173) % 999999:06x}",
                 to_address=f"0x{(index * 71) % 999999:06x}",
                 exchange=exchanges[index % len(exchanges)],
-                timestamp=(datetime.now(timezone.utc) - timedelta(minutes=index * 14)).isoformat(),
+                timestamp=(datetime.now(UTC) - timedelta(minutes=index * 14)).isoformat(),
                 tx_hash=f"0x{(index * 928371 + 5555):010x}",
             )
         )
@@ -314,7 +228,7 @@ def get_liquidations(count: int = 30) -> list[LiquidationEvent]:
                 amount_usd=8_000 + (index * 2917) % 480_000,
                 price=round(base_prices[symbol] * (1 + ((index % 7) - 3) / 500), 2),
                 exchange=exchanges[index % len(exchanges)],
-                timestamp=(datetime.now(timezone.utc) - timedelta(minutes=index * 6)).isoformat(),
+                timestamp=(datetime.now(UTC) - timedelta(minutes=index * 6)).isoformat(),
             )
         )
     return events
@@ -362,7 +276,7 @@ def get_macro_events() -> list[MacroEvent]:
         MacroEvent(
             id="evt-1",
             title="FOMC Interest Rate Decision",
-            date=(datetime.now(timezone.utc) + timedelta(days=2)).isoformat(),
+            date=(datetime.now(UTC) + timedelta(days=2)).isoformat(),
             impact="HIGH",
             forecast="5.25% - 5.50%",
             previous="5.25% - 5.50%",
@@ -400,8 +314,8 @@ def get_backtest_result(strategy: str, symbol: str, timeframe: str) -> BacktestR
 
 
 CHAT_STUB_RESPONSES = [
-    "This is a placeholder response. In Sprint 2, this will be powered by the AIMAG AI reasoning engine connected to live Binance data.",
-    "I don't have live market access yet, once the AI module is connected I'll analyze this in real time.",
+    "This is a placeholder response. Sprint 3 will connect this to the AIMAG AI reasoning engine.",
+    "I don't have live model access yet, once the AI module is connected I'll analyze this in real time.",
 ]
 
 

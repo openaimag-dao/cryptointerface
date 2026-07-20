@@ -1,6 +1,6 @@
 "use client";
 
-import { WATCHLIST_SYMBOLS } from "@/lib/mock/assets";
+import { WATCHLIST_SYMBOLS } from "@/lib/constants";
 import { useAssets } from "@/hooks/use-market-data";
 import { AssetCard } from "@/components/dashboard/asset-card";
 import { Skeleton } from "@/components/ui/skeleton";

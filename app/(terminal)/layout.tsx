@@ -2,10 +2,12 @@ import type { ReactNode } from "react";
 
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { MarketSocketProvider } from "@/components/layout/market-socket-provider";
 
 export default function TerminalLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen bg-background">
+      <MarketSocketProvider />
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header />

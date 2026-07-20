@@ -10,8 +10,8 @@ interface ConnectionState {
 }
 
 export const useConnectionStore = create<ConnectionState>((set) => ({
-  apiStatus: "online",
-  wsStatus: "online",
+  apiStatus: "connecting",
+  wsStatus: "connecting",
   setApiStatus: (status) => set({ apiStatus: status }),
   setWsStatus: (status) => set({ wsStatus: status }),
 }));

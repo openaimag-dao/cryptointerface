@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { WATCHLIST_SYMBOLS } from "@/lib/mock/assets";
+import { WATCHLIST_SYMBOLS } from "@/lib/constants";
 import { PageHeader } from "@/components/common/page-header";
 import { AssetCardGrid } from "@/components/dashboard/asset-card-grid";
 import { MarketOverview } from "@/components/dashboard/market-overview";
