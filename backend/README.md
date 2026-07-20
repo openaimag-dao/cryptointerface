@@ -3,9 +3,12 @@
 FastAPI service that ingests real Binance USDT-M Futures market data (REST +
 WebSocket), computes technical indicators, stores everything in Postgres,
 caches the hot path in Redis, and re-broadcasts live updates to the frontend
-over its own WebSocket (`/ws/market`). AI signal generation and trading
-decisions are **out of scope** — see `app/api/signals.py`, `portfolio.py`,
-etc., which still serve mock data pending a future AI sprint.
+over its own WebSocket (`/ws/market`). It also runs a deterministic AI
+Decision Engine on top of that data — see **[AI_ENGINE.md](./AI_ENGINE.md)**
+for how the Market Score, Confidence, Direction, and Risk plan are computed.
+Automatic trade execution is **out of scope**: the engine only ever analyzes
+and explains, it never places an order. `app/api/portfolio.py` and a few
+other routers still serve mock data pending a future sprint.
 
 ## How to run the project
 
@@ -57,7 +60,8 @@ directly (`NEXT_PUBLIC_API_BASE_URL` / `NEXT_PUBLIC_WS_URL` in `.env.local`).
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                # 34 tests: indicators, REST client, WS client, live feed, historical loader, WS manager
+pytest                # 72 tests: indicators, REST client, WS client, live feed, historical loader,
+                       # WS manager, and the AI Decision Engine (trend/momentum/.../confidence/risk/decision)
 ruff check .           # lint
 ruff format --check .  # formatting
 ```

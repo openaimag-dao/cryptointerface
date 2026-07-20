@@ -1,4 +1,4 @@
-import type { AiAnalysis, AiSignal, Direction } from "@/types";
+import type { AiSignal, Direction } from "@/types";
 
 const REASON_POOL: Record<Direction, string[]> = {
   LONG: [
@@ -67,28 +67,4 @@ export function getMockSignals(): AiSignal[] {
       timeframe: ["15m", "1H", "4H"][index % 3],
     };
   });
-}
-
-export function getMockAiAnalysis(symbol: string): AiAnalysis {
-  const signal = getMockSignals().find((item) => item.symbol === symbol);
-  const direction: Direction = signal?.direction ?? "LONG";
-  const entry = signal?.entry ?? 64280;
-  const riskUnit = entry * 0.018;
-  const stopLoss = signal?.stopLoss ?? entry - riskUnit;
-  const tpMultiplier = direction === "SHORT" ? -1 : 1;
-
-  return {
-    symbol,
-    aiScore: signal?.confidence ?? 70,
-    direction,
-    confidence: signal?.confidence ?? 70,
-    reasons: signal?.reasons ?? pickReasons(direction, 3),
-    entry,
-    stopLoss,
-    takeProfit1: signal?.takeProfit1 ?? entry + tpMultiplier * riskUnit * 1.5,
-    takeProfit2: signal?.takeProfit2 ?? entry + tpMultiplier * riskUnit * 2.5,
-    takeProfit3: signal?.takeProfit3 ?? entry + tpMultiplier * riskUnit * 4,
-    risk: Number(riskUnit.toFixed(4)),
-    reward: Number((riskUnit * 2.5).toFixed(4)),
-  };
 }
