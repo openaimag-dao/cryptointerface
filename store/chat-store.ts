@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import { getMockChatSessions } from "@/lib/mock/chat";
+import { createEmptyChatSession } from "@/lib/mock/chat";
 import { sendChatMessage } from "@/services/chat-service";
 import type { ChatMessage, ChatSession } from "@/types";
 
@@ -17,9 +17,9 @@ interface ChatState {
   sendMessage: (content: string) => Promise<void>;
 }
 
-const initialSessions = getMockChatSessions();
+const initialSessions = [createEmptyChatSession()];
 
-export const useChatStore = create<ChatState>((set) => ({
+export const useChatStore = create<ChatState>((set, get) => ({
   sessions: initialSessions,
   activeSessionId: initialSessions[0]?.id ?? "",
   isStreaming: false,
@@ -43,6 +43,8 @@ export const useChatStore = create<ChatState>((set) => ({
     const trimmed = content.trim();
     if (!trimmed) return;
 
+    const priorMessages = get().sessions.find((session) => session.id === get().activeSessionId)?.messages ?? [];
+
     const userMessage: ChatMessage = {
       id: createId(),
       role: "user",
@@ -64,7 +66,12 @@ export const useChatStore = create<ChatState>((set) => ({
       isStreaming: true,
     }));
 
-    const responseContent = await sendChatMessage();
+    let responseContent: string;
+    try {
+      responseContent = await sendChatMessage(trimmed, priorMessages);
+    } catch {
+      responseContent = "Something went wrong reaching the AI assistant. Please try again.";
+    }
 
     const assistantMessage: ChatMessage = {
       id: createId(),

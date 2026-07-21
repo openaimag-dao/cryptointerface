@@ -81,10 +81,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="AIMAG AI Terminal API",
-    description="Backend for the AIMAG AI trading terminal. Sprint 2 adds a real-time "
-    "Binance-backed Data Engine (REST + WebSocket ingestion, indicators, Postgres/Redis "
-    "storage). AI signal generation and trade decisions are explicitly out of scope here — "
-    "see app/api/signals.py, which still serves mock data pending Sprint 3.",
+    description="Backend for the AIMAG AI trading terminal: a real-time Binance-backed Data "
+    "Engine (REST + WebSocket ingestion, indicators, Postgres/Redis storage) feeding a "
+    "deterministic AI Decision Engine (no LLM, no trade execution — see AI_ENGINE.md) and a "
+    "Claude-backed AI Chat assistant. Portfolio/news/whales/macro/backtesting still serve "
+    "mock data pending a future sprint.",
     version="0.2.0",
     lifespan=lifespan,
 )
@@ -110,18 +111,21 @@ app.include_router(websocket.router)
 app.include_router(ai.router)
 
 # Real: signals.router batches the AI Decision Engine across the watchlist;
-# liquidations.router is fed by Binance's forceOrder WS stream.
+# liquidations.router is fed by Binance's forceOrder WS stream; chat.router
+# answers with Anthropic Claude grounded in a live watchlist snapshot (the
+# Decision Engine itself stays deterministic/no-LLM — see
+# app/services/claude_chat.py).
 app.include_router(signals.router)
 app.include_router(liquidations.router)
+app.include_router(chat.router)
 
-# Still mock (portfolio, news, whales, macro, backtesting, chat) — out of
-# scope until a future sprint.
+# Still mock (portfolio, news, whales, macro, backtesting) — out of scope
+# until a future sprint.
 app.include_router(portfolio.router)
 app.include_router(news.router)
 app.include_router(whales.router)
 app.include_router(macro.router)
 app.include_router(backtesting.router)
-app.include_router(chat.router)
 
 
 @app.get("/api/health", tags=["health"])

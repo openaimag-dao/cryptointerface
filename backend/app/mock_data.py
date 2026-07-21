@@ -7,7 +7,6 @@ served from the real Binance-backed Data Engine — see `app/services` and
 `open_interest.py`.
 """
 
-import random
 import time
 from datetime import UTC, datetime, timedelta
 
@@ -193,13 +192,3 @@ def get_backtest_result(strategy: str, symbol: str, timeframe: str) -> BacktestR
         sharpe_ratio=1.62,
         equity_curve=curve,
     )
-
-
-CHAT_STUB_RESPONSES = [
-    "This is a placeholder response. Sprint 3 will connect this to the AIMAG AI reasoning engine.",
-    "I don't have live model access yet, once the AI module is connected I'll analyze this in real time.",
-]
-
-
-def get_chat_stub_response() -> str:
-    return random.choice(CHAT_STUB_RESPONSES)

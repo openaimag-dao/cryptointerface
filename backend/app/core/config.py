@@ -48,8 +48,11 @@ class Settings(BaseSettings):
     ws_reconnect_max_delay_seconds: float = 60.0
     ws_heartbeat_interval_seconds: float = 30.0
 
-    # Sprint 3: AI reasoning engine
-    ai_provider_api_key: str = ""
+    # AI Chat — Anthropic Claude, used only by the chat assistant. The AI
+    # Decision Engine itself (app/ai_engine/) stays deterministic/no-LLM;
+    # this key never touches signal/score/direction generation.
+    anthropic_api_key: str = ""
+    anthropic_chat_model: str = "claude-sonnet-5"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
