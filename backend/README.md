@@ -60,8 +60,9 @@ directly (`NEXT_PUBLIC_API_BASE_URL` / `NEXT_PUBLIC_WS_URL` in `.env.local`).
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                # 72 tests: indicators, REST client, WS client, live feed, historical loader,
-                       # WS manager, and the AI Decision Engine (trend/momentum/.../confidence/risk/decision)
+pytest                # 85 tests: indicators, Binance/CoinGecko REST clients, WS client, live feed,
+                       # historical loader, WS manager, and the AI Decision Engine (trend/momentum/
+                       # .../confidence/risk/decision)
 ruff check .           # lint
 ruff format --check .  # formatting
 ```
@@ -142,6 +143,41 @@ Binance USDT-M Futures (fapi/fstream)
   watchdog that force-reconnects a silently-dead socket. None of this ever
   crashes the FastAPI process — a fully unreachable Binance just means the
   API serves empty results until connectivity returns (see `/api/status`).
+
+### CoinGecko fallback (Binance-unreachable environments only)
+
+Binance stays the only source when it's reachable. When it isn't (e.g. an
+egress policy or geo-restriction blocking `fapi.binance.com`), two small,
+clearly-scoped fallbacks kick in automatically — see
+`app/services/coingecko/` and `app/tasks/coingecko_fallback.py`:
+
+- **Historical backfill** (`app/tasks/historical_loader.py`): if a
+  symbol/interval has zero existing candles and Binance's own retries are
+  exhausted, `1h` and `4h` candles are backfilled from CoinGecko's public
+  OHLC endpoint instead (`1h` is approximated by resampling CoinGecko's
+  30min bars; `4h` is native granularity). `1m`/`5m`/`15m`/`1d` have no
+  matching CoinGecko granularity on the free tier and are left empty.
+  Volume is always `0` for these candles (CoinGecko's free OHLC endpoint
+  doesn't return it) — `is_supported()` in `coingecko/candles.py` is the
+  single source of truth for which intervals this covers.
+- **Live ticker** (`app/tasks/coingecko_fallback.py`): a background poller
+  that stays dormant while the Binance WebSocket is connected, and only
+  polls CoinGecko's `/coins/markets` (every 45s) when it isn't — updating
+  `market_stats` and broadcasting a `ticker` update over the same
+  `/ws/market` channel Binance would have used, so the frontend still sees
+  moving real prices.
+
+What this fallback does **not** cover: funding rate and open interest are
+futures-only concepts with no CoinGecko/spot equivalent, so they simply
+stay empty while Binance is unreachable — the AI Decision Engine's
+`funding`/`oi` scoring modules already handle "no history" gracefully
+(see `backend/AI_ENGINE.md`). There's also no WebSocket on CoinGecko's
+free tier, so this is REST-polled, not push-based.
+
+`SYMBOL_TO_COINGECKO_ID` in `app/services/coingecko/symbols.py` maps the
+default 7 symbols; add an entry there for any new coin you want this
+fallback to cover (an unmapped symbol just gets no fallback data, which is
+safe).
 
 ## How to add a new coin
 
