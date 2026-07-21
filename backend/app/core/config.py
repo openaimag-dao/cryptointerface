@@ -54,6 +54,18 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_chat_model: str = "claude-sonnet-5"
 
+    # Sprint 4: Intelligence Layer (app/intelligence/).
+    # Alpha Vantage free tier is tiny (25 requests/day) — see
+    # app/intelligence/macro/providers.py — so the default poll interval
+    # is deliberately long. Leave the key blank to disable the
+    # ETF-proxy/treasury-yield indicators; Fear & Greed and BTC Dominance
+    # stay free/keyless regardless.
+    alpha_vantage_api_key: str = ""
+    macro_poll_interval_seconds: float = 21_600.0  # 6h
+    sentiment_recompute_interval_seconds: float = 300.0  # 5min
+    llm_explanation_interval_seconds: float = 1_800.0  # 30min
+    llm_explanation_anchor_symbol: str = "BTCUSDT"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

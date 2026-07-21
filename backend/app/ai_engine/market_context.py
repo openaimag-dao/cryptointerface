@@ -11,9 +11,11 @@ from dataclasses import dataclass
 import numpy as np
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai_engine.types import MacroSnapshot
 from app.models.funding import FundingRate
 from app.models.open_interest import OpenInterest
 from app.schemas.candle import Candle
+from app.services.macro_repository import get_latest_macro_snapshot
 from app.services.market_repository import (
     get_recent_candles,
     get_recent_funding_history,
@@ -38,6 +40,10 @@ class MarketContext:
     volumes: np.ndarray
     funding_history: list[FundingRate]  # ascending
     oi_history: list[OpenInterest]  # ascending
+    # Market-wide, not symbol-specific — same snapshot for every symbol at
+    # a given point in time. None until the Sprint 4 Macro Engine has
+    # fetched at least one reading (see app/intelligence/macro/).
+    macro_snapshot: MacroSnapshot | None = None
 
     @property
     def last_close(self) -> float:
@@ -65,6 +71,7 @@ async def build_market_context(
     candles = [to_candle_schema(row) for row in candle_rows]
     funding_history = await get_recent_funding_history(db, symbol, limit=funding_lookback)
     oi_history = await get_recent_open_interest_history(db, symbol, limit=oi_lookback)
+    macro_snapshot = await get_latest_macro_snapshot(db)
 
     return MarketContext(
         symbol=symbol,
@@ -77,4 +84,5 @@ async def build_market_context(
         volumes=np.array([c.volume for c in candles], dtype=float),
         funding_history=funding_history,
         oi_history=oi_history,
+        macro_snapshot=macro_snapshot,
     )

@@ -1,12 +1,12 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from app.schemas.base import CamelModel
 
 MacroSentiment = Literal["POSITIVE", "NEGATIVE", "NEUTRAL"]
 MacroImpact = Literal["HIGH", "MEDIUM", "LOW"]
 
 
-class MacroIndicator(BaseModel):
+class MacroIndicator(CamelModel):
     id: str
     label: str
     value: str
@@ -15,7 +15,7 @@ class MacroIndicator(BaseModel):
     description: str
 
 
-class MacroEvent(BaseModel):
+class MacroEvent(CamelModel):
     id: str
     title: str
     date: str

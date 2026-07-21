@@ -16,8 +16,13 @@ stream in real time and persisted to Postgres; `/api/liquidations/heatmap`
 buckets recent liquidations by price for one symbol (`?symbol=`, defaults to
 `BTCUSDT`). `/api/chat/messages` is a real Anthropic Claude assistant
 grounded in a live watchlist snapshot (see "AI Chat" below) — the AI
-Decision Engine itself stays deterministic/no-LLM. `app/api/portfolio.py`
-and a few other routers still serve mock data pending a future sprint.
+Decision Engine itself stays deterministic/no-LLM. Sprint 4 adds an
+**Intelligence Layer** (`app/intelligence/`) — real Macro data feeding
+`/api/macro` and the Decision Engine's `macro` factor, a Sentiment Engine
+blending technical/macro/liquidations/news/whales at `/api/sentiment`, and
+an LLM Explanation Layer at `/api/llm/explanation/{symbol}` (see
+"Intelligence Layer" below). `app/api/portfolio.py` and a few other
+routers still serve mock data pending a future sprint.
 
 ## How to run the project
 
@@ -69,9 +74,10 @@ directly (`NEXT_PUBLIC_API_BASE_URL` / `NEXT_PUBLIC_WS_URL` in `.env.local`).
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                # 90 tests: indicators, Binance/CoinGecko REST clients, WS client, live feed,
+pytest                # 111 tests: indicators, Binance/CoinGecko REST clients, WS client, live feed,
                        # historical loader, WS manager, the AI Decision Engine (trend/momentum/
-                       # .../confidence/risk/decision), and the Claude chat service
+                       # .../confidence/risk/decision), the Claude chat service, and the Sprint 4
+                       # Intelligence Layer (macro scoring/providers, sentiment engine, LLM explanation)
 ruff check .           # lint
 ruff format --check .  # formatting
 ```
@@ -211,6 +217,138 @@ Set `ANTHROPIC_API_KEY` in `.env` to enable it (get one at
 [console.anthropic.com](https://console.anthropic.com/)). With no key set,
 the endpoint replies with a "not configured" message instead of erroring —
 same fail-open philosophy as the rest of the Data Engine.
+
+## Intelligence Layer (Sprint 4)
+
+`app/intelligence/` sits alongside the Data Engine and AI Decision Engine —
+analysis only, same as everywhere else in this app: nothing here ever
+places an order. This sprint ships Macro, Sentiment, and LLM Explanation;
+News (real RSS ingestion) and Whales (on-chain transfer tracking) are
+still Sprint 4 stubs — see `app/ai_engine/scoring/news.py` and the
+Sentiment Engine's `whales` category — pending follow-up PRs.
+
+```
+app/intelligence/
+  macro/
+    symbols.py       registry of every macro indicator + its provider
+    providers.py      Alpha Vantage / Fear&Greed / CoinGecko REST clients
+    service.py         fetch_and_persist_macro_snapshot() — one poll cycle
+  sentiment/
+    engine.py           compute_sentiment() — blends 5 categories
+    liquidation_factor.py  real Binance liquidation data -> a FactorScore
+  llm/
+    explanation.py      build_llm_explanation() — Claude, forced tool-use
+  scheduler/
+    tasks.py             3 background loops, see app/main.py's lifespan
+  cache/                 Redis key templates + TTLs for this layer
+
+app/services/
+  macro_repository.py, sentiment_repository.py, llm_repository.py
+    persistence for the three new tables (macro_data, sentiment_scores,
+    llm_reports) — same upsert/append-only patterns as market_repository.py
+```
+
+### Macro Engine
+
+10 indicators, each stored as its own history in `macro_data`
+(`app/models/macro.py`, append-only — one row per fetch):
+
+| Indicator | Provider | Notes |
+|---|---|---|
+| DXY, Gold, Silver, Oil, S&P 500, NASDAQ, VIX | Alpha Vantage (`TIME_SERIES_DAILY`) | ETF proxies (UUP/GLD/SLV/USO/SPY/QQQ/VIXY) — no free direct index feed exists, see `app/ai_engine/scoring/macro.py`'s docstring for why this is scored by % change, not level |
+| US 10Y Yield | Alpha Vantage (`TREASURY_YIELD`) | A real yield, not a proxy |
+| Crypto Fear & Greed | `alternative.me` | Free, keyless, 0-100 index, updates daily |
+| BTC Dominance | CoinGecko `/global` | Free, keyless |
+
+Set `ALPHA_VANTAGE_API_KEY` in `.env` (free tier: 25 requests/day — get one
+at [alphavantage.co](https://www.alphavantage.co/support/#api-key)) to
+enable the 7 ETF/treasury-proxied indicators; Fear & Greed and BTC
+Dominance work regardless. `MACRO_POLL_INTERVAL_SECONDS` (default 6h) is
+deliberately long to respect that quota.
+
+Of the 10, **DXY/NASDAQ/S&P 500/VIX/US 10Y/Gold/Fear & Greed feed real
+scoring** — `app/ai_engine/scoring/macro.py::score_macro()` reads the
+latest snapshot (`MarketContext.macro_snapshot`, built by
+`market_context.py`) and now carries real weight (`0.09`) in
+`market_score.py`'s `FACTOR_WEIGHTS`, up from the Sprint 3 stub's `0.00` —
+exactly the extension point that stub's docstring described. Silver, Oil,
+and BTC Dominance are fetched/displayed but not scored (ambiguous or
+too-narrow a signal for crypto risk sentiment — see `symbols.py`'s
+`used_in_scoring` field for the reasoning per indicator).
+
+**To add a new macro source**: add one `MacroIndicatorDef` to
+`app/intelligence/macro/symbols.py`, handle its `provider` value in
+`service.py` (reuse `providers.py`'s pattern — a client method that
+returns `float | None` and never raises), and it starts showing up in
+`/api/macro/indicators` and (if scored) `score_macro()` automatically.
+
+### Sentiment Engine
+
+`app/intelligence/sentiment/engine.py::compute_sentiment()` blends 5
+categories, each returning `score` (0-100) / `direction` / `confidence` /
+`reasons` — this sits *above* `market_score.py` (which only aggregates a
+single symbol's technical factors); it never feeds back into the Decision
+Engine:
+
+| Category | Weight | Source |
+|---|---:|---|
+| Technical | 0.55 | The Decision Engine's own Market Score/Confidence (`analyze_market()`) |
+| Macro | 0.20 | `score_macro()` — same real feed as above |
+| Liquidations | 0.15 | Real: trailing-24h long/short totals, contrarian read (heavy long liqs -> mild bullish, same "contrarian at extremes" logic `scoring/funding.py` already uses) |
+| News | 0.10 | Stub — neutral, `0%` confidence, pending real RSS ingestion |
+| Whales | 0.00 | Stub — neutral, `0%` confidence, pending on-chain tracking |
+
+`overall_score`/`confidence` are the weight-blended sum/average across
+all 5; `direction` is derived from `overall_score` the same
+`direction_from_score()` thresholds use everywhere else in the app.
+
+### LLM Explanation Layer
+
+`app/intelligence/llm/explanation.py::build_llm_explanation()` is the
+**only** place an LLM's output reaches the user as analysis, and it's
+deliberately narrow:
+
+- `direction`/`confidence` are copied straight from the Decision Engine /
+  Sentiment Engine — Claude is never asked for them and structurally
+  can't override them (they aren't even fields in the tool schema below).
+- Claude is given the engine's own numbers/reasons as structured JSON and
+  forced (via `tool_choice: {"type": "tool", "name": "emit_explanation"}`)
+  to respond through a fixed schema — `summary`, `key_drivers`, `risks`,
+  `opportunities`, `assets_affected`. It cannot free-associate a different
+  shape, and the system prompt explicitly forbids inventing facts not
+  present in the input or suggesting a trade.
+- No key configured, or an upstream error, falls back to a clearly-labeled
+  message plus the engine's own `reasons` as `key_drivers` — same
+  fail-open philosophy as `claude_chat.py`.
+
+### Scheduler
+
+Three background loops (`app/intelligence/scheduler/tasks.py`), wired
+into `main.py`'s lifespan alongside the Data Engine's existing pollers —
+each is a `while not stop_event.is_set()` loop, one bad cycle never
+crashing the loop:
+
+| Task | Interval (config var) | Default |
+|---|---|---|
+| `run_macro_poller` | `MACRO_POLL_INTERVAL_SECONDS` | 6h |
+| `run_sentiment_recompute` (every watchlist symbol) | `SENTIMENT_RECOMPUTE_INTERVAL_SECONDS` | 5min |
+| `run_llm_explanation_refresh` (`LLM_EXPLANATION_ANCHOR_SYMBOL` only) | `LLM_EXPLANATION_INTERVAL_SECONDS` | 30min |
+
+The LLM refresh only runs for one configurable "anchor" symbol (default
+`BTCUSDT`) — that's what feeds `/api/dashboard/intelligence`'s cached
+explanation without a Claude call on every dashboard poll.
+`/api/llm/explanation/{symbol}` itself still computes live, for any
+symbol, on every request.
+
+### API endpoints
+
+| Endpoint | Notes |
+|---|---|
+| `GET /api/macro/indicators` | Real, all 10 indicators (see above) |
+| `GET /api/macro/events` | Still mock — an economic calendar needs its own provider, out of scope this sprint |
+| `GET /api/sentiment?symbol=&interval=` | Real, computes + persists on every call |
+| `GET /api/llm/explanation/{symbol}?interval=` | Real, computes + persists live |
+| `GET /api/dashboard/intelligence?symbol=&interval=` | Real; `aiExplanation` reads the scheduler's cached anchor-symbol report (fast enough to poll) |
 
 ## How to add a new coin
 

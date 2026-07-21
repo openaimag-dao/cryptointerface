@@ -114,6 +114,17 @@ class CoinGeckoRestClient:
             )
         return result
 
+    async def get_global_data(self) -> float | None:
+        """BTC's share of total crypto market cap (0-100), used by the
+        Macro Engine (`app/intelligence/macro/`) — unrelated to the
+        Binance-fallback role of the rest of this client, but the same
+        free/keyless endpoint family so it lives here rather than a
+        second client."""
+        raw = await self._get("/global")
+        assert isinstance(raw, dict)
+        btc_pct = raw.get("data", {}).get("market_cap_percentage", {}).get("btc")
+        return float(btc_pct) if btc_pct is not None else None
+
     async def get_ohlc(self, coin_id: str, days: int) -> list[OhlcCandle]:
         """Free-tier granularity is fixed by `days`, not independently
         selectable: 1-2 days -> 30min bars, 3-30 days -> 4h bars,

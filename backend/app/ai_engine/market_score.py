@@ -1,10 +1,10 @@
 """Aggregates every scoring module into one weighted Market Score.
 
 Weights are fixed constants (not learned, not random) so the aggregate is
-as reproducible and auditable as each individual factor. `macro` and
-`news` are Sprint 4 stubs and carry zero weight today — wiring real data
-into them later only requires bumping their weight here, nothing else in
-the engine has to change.
+as reproducible and auditable as each individual factor. `news` is still
+a Sprint 4 stub at zero weight (real news ingestion lands in a follow-up
+PR); `macro` moved from 0.00 to a real weight in Sprint 4 now that
+`score_macro()` reads a real snapshot — see that module's docstring.
 """
 
 from dataclasses import dataclass
@@ -24,16 +24,19 @@ from app.ai_engine.types import Direction, FactorScore, clamp, direction_from_sc
 # Must sum to 1.0. Trend/momentum/structure carry the most weight since
 # they're the most predictive, well-established technical factors;
 # volatility is intentionally low-weighted since it's directionally
-# ambiguous on its own. macro/news are Sprint 4 stubs at zero weight.
+# ambiguous on its own. macro now carries a real weight (Sprint 4) — each
+# technical factor gave up a small slice (volatility was already minimal,
+# left untouched) to fund it. news is still a Sprint 4 stub at zero
+# weight pending real news ingestion.
 FACTOR_WEIGHTS: dict[str, float] = {
-    "trend": 0.22,
-    "momentum": 0.18,
-    "structure": 0.18,
-    "oi": 0.15,
-    "volume": 0.12,
-    "funding": 0.10,
+    "trend": 0.20,
+    "momentum": 0.16,
+    "structure": 0.16,
+    "oi": 0.14,
+    "volume": 0.11,
+    "funding": 0.09,
     "volatility": 0.05,
-    "macro": 0.00,
+    "macro": 0.09,
     "news": 0.00,
 }
 
@@ -55,7 +58,7 @@ def compute_market_score(ctx: MarketContext) -> MarketScoreResult:
         "structure": score_structure(ctx.closes, ctx.highs, ctx.lows),
         "funding": score_funding(ctx.funding_history),
         "oi": score_oi(ctx.closes, ctx.oi_history),
-        "macro": score_macro(),
+        "macro": score_macro(ctx.macro_snapshot),
         "news": score_news(),
     }
 

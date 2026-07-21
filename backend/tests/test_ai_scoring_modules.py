@@ -10,6 +10,7 @@ from app.ai_engine.scoring.oi import score_oi
 from app.ai_engine.scoring.structure import score_structure
 from app.ai_engine.scoring.volatility import score_volatility
 from app.ai_engine.scoring.volume import score_volume
+from app.ai_engine.types import MacroIndicatorReading, MacroSnapshot
 
 
 def _uptrend(n: int = 300) -> np.ndarray:
@@ -123,12 +124,55 @@ def test_oi_insufficient_history_is_neutral():
     assert factor.direction == "WAIT"
 
 
-def test_macro_stub_is_neutral_and_labeled_as_stub():
-    factor = score_macro()
+def test_macro_no_snapshot_is_neutral_and_labeled_as_stub():
+    factor = score_macro(None)
 
     assert factor.score == 50.0
     assert factor.direction == "WAIT"
     assert factor.details["stub"] is True
+
+
+def test_macro_bullish_snapshot_scores_above_neutral():
+    snapshot = MacroSnapshot(
+        dxy=MacroIndicatorReading(value=25.0, change_percent=-1.5),  # weaker dollar -> bullish
+        nasdaq=MacroIndicatorReading(value=400.0, change_percent=2.0),  # risk-on -> bullish
+        fear_greed=MacroIndicatorReading(value=80.0, change_percent=None),  # greed -> bullish
+    )
+    factor = score_macro(snapshot)
+
+    assert factor.score > 50.0
+    assert factor.direction in ("LONG", "WAIT")
+    assert any("NASDAQ" in reason for reason in factor.reasons)
+    assert any("DXY" in reason for reason in factor.reasons)
+
+
+def test_macro_bearish_snapshot_scores_below_neutral():
+    snapshot = MacroSnapshot(
+        dxy=MacroIndicatorReading(value=25.0, change_percent=1.5),  # stronger dollar -> bearish
+        nasdaq=MacroIndicatorReading(value=400.0, change_percent=-2.0),  # risk-off -> bearish
+        vix=MacroIndicatorReading(value=15.0, change_percent=10.0),  # fear spiking -> bearish
+        fear_greed=MacroIndicatorReading(value=15.0, change_percent=None),  # fear -> bearish
+    )
+    factor = score_macro(snapshot)
+
+    assert factor.score < 50.0
+    assert factor.direction in ("SHORT", "WAIT")
+
+
+def test_macro_snapshot_with_no_moving_readings_stays_neutral():
+    snapshot = MacroSnapshot(dxy=MacroIndicatorReading(value=25.0, change_percent=0.0))
+    factor = score_macro(snapshot)
+
+    assert factor.score == 50.0
+
+
+def test_macro_deterministic_same_input_same_output():
+    snapshot = MacroSnapshot(nasdaq=MacroIndicatorReading(value=400.0, change_percent=1.2))
+    first = score_macro(snapshot)
+    second = score_macro(snapshot)
+
+    assert first.score == second.score
+    assert first.reasons == second.reasons
 
 
 def test_news_stub_is_neutral_and_labeled_as_stub():

@@ -75,6 +75,34 @@ def strength_from_score(score: float) -> float:
 
 
 @dataclass(frozen=True)
+class MacroIndicatorReading:
+    """One macro indicator's latest value plus its % change since the
+    previous stored reading (`None` if there's no prior reading yet)."""
+
+    value: float
+    change_percent: float | None
+
+
+@dataclass(frozen=True)
+class MacroSnapshot:
+    """Latest macro-indicator readings, built by `market_context.py` from
+    `app/services/macro_repository.py` and consumed by
+    `scoring/macro.py::score_macro()`. Every field is optional — a feed
+    that hasn't been fetched yet (no API key configured, or the scheduler
+    hasn't run) simply leaves that field `None`, and `score_macro()`
+    treats a missing reading as "no opinion" rather than an error."""
+
+    dxy: MacroIndicatorReading | None = None
+    gold: MacroIndicatorReading | None = None
+    sp500: MacroIndicatorReading | None = None
+    nasdaq: MacroIndicatorReading | None = None
+    vix: MacroIndicatorReading | None = None
+    us10y: MacroIndicatorReading | None = None
+    fear_greed: MacroIndicatorReading | None = None
+    btc_dominance: MacroIndicatorReading | None = None
+
+
+@dataclass(frozen=True)
 class FactorScore:
     """One scoring module's read on the market: a 0-100 score, the
     direction that score implies, how strongly it's expressed, and the
