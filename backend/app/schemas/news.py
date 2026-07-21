@@ -1,14 +1,16 @@
-from pydantic import BaseModel
-
+from app.schemas.base import CamelModel
 from app.schemas.market import Sentiment
 
 
-class NewsItem(BaseModel):
+class NewsItem(CamelModel):
     id: str
+    source: str
     title: str
     summary: str
-    source: str
     published_at: str
-    sentiment: Sentiment
-    tags: list[str]
+    language: str
+    symbols: list[str]
     url: str
+    impact_score: float
+    sentiment: Sentiment
+    category: str

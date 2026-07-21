@@ -18,10 +18,12 @@ buckets recent liquidations by price for one symbol (`?symbol=`, defaults to
 grounded in a live watchlist snapshot (see "AI Chat" below) — the AI
 Decision Engine itself stays deterministic/no-LLM. Sprint 4 adds an
 **Intelligence Layer** (`app/intelligence/`) — real Macro data feeding
-`/api/macro` and the Decision Engine's `macro` factor, a Sentiment Engine
-blending technical/macro/liquidations/news/whales at `/api/sentiment`, and
-an LLM Explanation Layer at `/api/llm/explanation/{symbol}` (see
-"Intelligence Layer" below). `app/api/portfolio.py` and a few other
+`/api/macro` and the Decision Engine's `macro` factor, real News (RSS +
+a deterministic classifier) feeding `/api/news` and the `news` factor, a
+Sentiment Engine blending technical/macro/liquidations/news/whales at
+`/api/sentiment`, and an LLM Explanation Layer at
+`/api/llm/explanation/{symbol}` (see "Intelligence Layer" below).
+`app/api/portfolio.py` and a few other
 routers still serve mock data pending a future sprint.
 
 ## How to run the project
@@ -74,10 +76,11 @@ directly (`NEXT_PUBLIC_API_BASE_URL` / `NEXT_PUBLIC_WS_URL` in `.env.local`).
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                # 111 tests: indicators, Binance/CoinGecko REST clients, WS client, live feed,
+pytest                # 132 tests: indicators, Binance/CoinGecko REST clients, WS client, live feed,
                        # historical loader, WS manager, the AI Decision Engine (trend/momentum/
                        # .../confidence/risk/decision), the Claude chat service, and the Sprint 4
-                       # Intelligence Layer (macro scoring/providers, sentiment engine, LLM explanation)
+                       # Intelligence Layer (macro + news scoring/providers/classifier, sentiment
+                       # engine, LLM explanation)
 ruff check .           # lint
 ruff format --check .  # formatting
 ```
@@ -222,10 +225,9 @@ same fail-open philosophy as the rest of the Data Engine.
 
 `app/intelligence/` sits alongside the Data Engine and AI Decision Engine —
 analysis only, same as everywhere else in this app: nothing here ever
-places an order. This sprint ships Macro, Sentiment, and LLM Explanation;
-News (real RSS ingestion) and Whales (on-chain transfer tracking) are
-still Sprint 4 stubs — see `app/ai_engine/scoring/news.py` and the
-Sentiment Engine's `whales` category — pending follow-up PRs.
+places an order. This sprint ships Macro, News, Sentiment, and LLM
+Explanation; Whales (on-chain transfer tracking) is still a Sprint 4 stub
+— see the Sentiment Engine's `whales` category — pending a follow-up PR.
 
 ```
 app/intelligence/
@@ -233,19 +235,26 @@ app/intelligence/
     symbols.py       registry of every macro indicator + its provider
     providers.py      Alpha Vantage / Fear&Greed / CoinGecko REST clients
     service.py         fetch_and_persist_macro_snapshot() — one poll cycle
+  news/
+    sources.py         registry of RSS sources
+    fetcher.py          httpx fetch + feedparser parse, per source
+    classifier.py        deterministic keyword sentiment/impact/symbols/category
+    service.py            fetch_and_persist_news() — one poll cycle
   sentiment/
     engine.py           compute_sentiment() — blends 5 categories
     liquidation_factor.py  real Binance liquidation data -> a FactorScore
   llm/
     explanation.py      build_llm_explanation() — Claude, forced tool-use
   scheduler/
-    tasks.py             3 background loops, see app/main.py's lifespan
+    tasks.py             4 background loops, see app/main.py's lifespan
   cache/                 Redis key templates + TTLs for this layer
 
 app/services/
-  macro_repository.py, sentiment_repository.py, llm_repository.py
-    persistence for the three new tables (macro_data, sentiment_scores,
-    llm_reports) — same upsert/append-only patterns as market_repository.py
+  macro_repository.py, news_repository.py, sentiment_repository.py,
+  llm_repository.py
+    persistence for the four new tables (macro_data, news,
+    sentiment_scores, llm_reports) — same upsert/append-only patterns as
+    market_repository.py
 ```
 
 ### Macro Engine
@@ -282,6 +291,39 @@ too-narrow a signal for crypto risk sentiment — see `symbols.py`'s
 returns `float | None` and never raises), and it starts showing up in
 `/api/macro/indicators` and (if scored) `score_macro()` automatically.
 
+### News Engine
+
+Aggregates 3 RSS sources (CoinDesk, Cointelegraph, Decrypt —
+`app/intelligence/news/sources.py`) on `NEWS_POLL_INTERVAL_SECONDS`
+(default 10min, no rate-limit concern like Alpha Vantage). Each article
+is classified once at ingest time by a **deterministic keyword
+classifier** (`classifier.py`) — not an LLM call per article: a poll
+cycle can pull dozens of articles across sources, and running each
+through Claude would be slow and turn every poll into a pile of billed
+API calls for a rough directional read. The classifier produces:
+
+- `symbols` — which watchlist assets are mentioned (name/ticker alias
+  matching, e.g. "Bitcoin" or "BTC" -> `BTC`)
+- `sentiment` (`BULLISH`/`BEARISH`/`NEUTRAL`) — net bullish vs. bearish
+  keyword hits
+- `impact_score` (0-100) — base score + bonus per high-impact keyword
+  (SEC, ETF, hack, bankruptcy, ...) + bonus per symbol mentioned
+- `category` (`Security`/`Regulation`/`Institutional`/`DeFi`/`Technology`/`Market`)
+
+Articles persist to a `news` table (`app/models/news.py`), deduped on
+`url` (`ON CONFLICT DO NOTHING` — RSS feeds re-serve the same articles on
+every poll). `app/services/news_repository.py::get_news_snapshot_for_symbol()`
+builds the `ai_engine`-facing snapshot from recent articles (72h
+lookback) that either mention that symbol or are broad market-wide news
+(no symbol tag — e.g. a Fed/regulation story that isn't asset-specific),
+weighted by `impact_score`. `app/ai_engine/scoring/news.py::score_news()`
+reads that snapshot and now carries real weight (`0.08`) in
+`market_score.py`'s `FACTOR_WEIGHTS`, up from the Sprint 3 stub's `0.00`.
+
+**To add a new news source**: add one `NewsSourceDef` (RSS URL) to
+`app/intelligence/news/sources.py`. Nothing else needs to change —
+`service.py` iterates the registry on every poll cycle.
+
 ### Sentiment Engine
 
 `app/intelligence/sentiment/engine.py::compute_sentiment()` blends 5
@@ -295,7 +337,7 @@ Engine:
 | Technical | 0.55 | The Decision Engine's own Market Score/Confidence (`analyze_market()`) |
 | Macro | 0.20 | `score_macro()` — same real feed as above |
 | Liquidations | 0.15 | Real: trailing-24h long/short totals, contrarian read (heavy long liqs -> mild bullish, same "contrarian at extremes" logic `scoring/funding.py` already uses) |
-| News | 0.10 | Stub — neutral, `0%` confidence, pending real RSS ingestion |
+| News | 0.10 | Real: `score_news()` — same real feed as above |
 | Whales | 0.00 | Stub — neutral, `0%` confidence, pending on-chain tracking |
 
 `overall_score`/`confidence` are the weight-blended sum/average across
@@ -323,7 +365,7 @@ deliberately narrow:
 
 ### Scheduler
 
-Three background loops (`app/intelligence/scheduler/tasks.py`), wired
+Four background loops (`app/intelligence/scheduler/tasks.py`), wired
 into `main.py`'s lifespan alongside the Data Engine's existing pollers —
 each is a `while not stop_event.is_set()` loop, one bad cycle never
 crashing the loop:
@@ -331,6 +373,7 @@ crashing the loop:
 | Task | Interval (config var) | Default |
 |---|---|---|
 | `run_macro_poller` | `MACRO_POLL_INTERVAL_SECONDS` | 6h |
+| `run_news_poller` | `NEWS_POLL_INTERVAL_SECONDS` | 10min |
 | `run_sentiment_recompute` (every watchlist symbol) | `SENTIMENT_RECOMPUTE_INTERVAL_SECONDS` | 5min |
 | `run_llm_explanation_refresh` (`LLM_EXPLANATION_ANCHOR_SYMBOL` only) | `LLM_EXPLANATION_INTERVAL_SECONDS` | 30min |
 
@@ -346,6 +389,9 @@ symbol, on every request.
 |---|---|
 | `GET /api/macro/indicators` | Real, all 10 indicators (see above) |
 | `GET /api/macro/events` | Still mock — an economic calendar needs its own provider, out of scope this sprint |
+| `GET /api/news?limit=&symbol=&category=` | Real, filterable list |
+| `GET /api/news/latest?limit=` | Real, most recent N articles across all sources |
+| `GET /api/news/search?q=&limit=` | Real, title/summary keyword search |
 | `GET /api/sentiment?symbol=&interval=` | Real, computes + persists on every call |
 | `GET /api/llm/explanation/{symbol}?interval=` | Real, computes + persists live |
 | `GET /api/dashboard/intelligence?symbol=&interval=` | Real; `aiExplanation` reads the scheduler's cached anchor-symbol report (fast enough to poll) |

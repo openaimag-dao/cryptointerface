@@ -103,6 +103,20 @@ class MacroSnapshot:
 
 
 @dataclass(frozen=True)
+class NewsSnapshot:
+    """Recent news relevant to one symbol, built by
+    `app/services/news_repository.py::get_news_snapshot_for_symbol()` and
+    consumed by `scoring/news.py::score_news()`. `avg_sentiment_score` is
+    already on the familiar 0-100 scale (BULLISH articles pull it toward
+    100, BEARISH toward 0), weighted by each article's `impact_score` —
+    a high-impact BEARISH story moves this further than a throwaway one."""
+
+    article_count: int
+    avg_sentiment_score: float
+    avg_impact: float
+
+
+@dataclass(frozen=True)
 class FactorScore:
     """One scoring module's read on the market: a 0-100 score, the
     direction that score implies, how strongly it's expressed, and the

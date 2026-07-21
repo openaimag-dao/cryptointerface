@@ -11,7 +11,7 @@ from dataclasses import dataclass
 import numpy as np
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai_engine.types import MacroSnapshot
+from app.ai_engine.types import MacroSnapshot, NewsSnapshot
 from app.models.funding import FundingRate
 from app.models.open_interest import OpenInterest
 from app.schemas.candle import Candle
@@ -22,6 +22,7 @@ from app.services.market_repository import (
     get_recent_open_interest_history,
     to_candle_schema,
 )
+from app.services.news_repository import get_news_snapshot_for_symbol
 
 DEFAULT_CANDLE_LOOKBACK = 250  # enough for EMA200 + slope/structure windows to leave warm-up
 DEFAULT_FUNDING_LOOKBACK = 20
@@ -44,6 +45,10 @@ class MarketContext:
     # a given point in time. None until the Sprint 4 Macro Engine has
     # fetched at least one reading (see app/intelligence/macro/).
     macro_snapshot: MacroSnapshot | None = None
+    # Symbol-specific (falls back to broad market-wide articles with no
+    # symbol tag — see get_news_snapshot_for_symbol()). None until the
+    # News Engine has ingested something relevant (see app/intelligence/news/).
+    news_snapshot: NewsSnapshot | None = None
 
     @property
     def last_close(self) -> float:
@@ -72,6 +77,7 @@ async def build_market_context(
     funding_history = await get_recent_funding_history(db, symbol, limit=funding_lookback)
     oi_history = await get_recent_open_interest_history(db, symbol, limit=oi_lookback)
     macro_snapshot = await get_latest_macro_snapshot(db)
+    news_snapshot = await get_news_snapshot_for_symbol(db, symbol)
 
     return MarketContext(
         symbol=symbol,
@@ -85,4 +91,5 @@ async def build_market_context(
         funding_history=funding_history,
         oi_history=oi_history,
         macro_snapshot=macro_snapshot,
+        news_snapshot=news_snapshot,
     )

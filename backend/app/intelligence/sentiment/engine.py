@@ -10,10 +10,12 @@ Engine — trading-relevant Direction/Confidence still come from
 `app.ai_engine` alone (`/api/ai/*`, `/api/signals`); this is a separate,
 explanatory view for the Dashboard Intelligence Card and `/api/sentiment`.
 
-News and Whales are still Sprint 4 stubs (real ingestion lands in
-follow-up PRs) — each contributes a neutral, zero-weighted read so the
+Whales is still a Sprint 4 stub (real on-chain tracking lands in a
+follow-up PR) — it contributes a neutral, zero-weighted read so the
 overall blend is unaffected until real data lands, the same pattern
-`app.ai_engine` used for macro/news in Sprint 3.
+`app.ai_engine` used for macro/news in Sprint 3. News is real as of this
+PR (RSS ingestion + a deterministic classifier — see
+`app/intelligence/news/`).
 """
 
 from dataclasses import dataclass
@@ -29,8 +31,8 @@ from app.intelligence.sentiment.liquidation_factor import score_liquidations
 from app.services.market_repository import get_liquidation_totals_24h
 
 # Must sum to 1.0. Technical carries the most weight since it's the only
-# category backed by a full deterministic model; Macro/Liquidations are
-# real-but-narrower signals; News/Whales are Sprint 4 stubs at zero weight
+# category backed by a full deterministic model; Macro/Liquidations/News
+# are real-but-narrower signals; Whales is a Sprint 4 stub at zero weight
 # until real ingestion lands (see module docstring).
 CATEGORY_WEIGHTS: dict[str, float] = {
     "technical": 0.55,
@@ -99,7 +101,7 @@ async def compute_sentiment(db: AsyncSession, symbol: str, interval: str) -> Sen
     macro = _from_factor_score(score_macro(ctx.macro_snapshot))
     liquidation_totals = await get_liquidation_totals_24h(db)
     liquidations = _from_factor_score(score_liquidations(liquidation_totals))
-    news = _from_factor_score(score_news())
+    news = _from_factor_score(score_news(ctx.news_snapshot))
     whales = _whales_stub()
 
     breakdown: dict[str, SentimentFactor] = {

@@ -11,6 +11,7 @@ from app.core.logging import get_logger
 from app.database.session import AsyncSessionLocal
 from app.intelligence.llm.explanation import build_llm_explanation
 from app.intelligence.macro.service import fetch_and_persist_macro_snapshot
+from app.intelligence.news.service import fetch_and_persist_news
 from app.intelligence.sentiment.engine import compute_sentiment
 from app.services.llm_repository import insert_llm_report
 from app.services.sentiment_repository import insert_sentiment_score
@@ -37,6 +38,17 @@ async def run_macro_poller(stop_event: asyncio.Event | None = None) -> None:
         except Exception:  # noqa: BLE001 — one bad cycle must not kill the poller
             logger.warning("macro_poll_cycle_failed", exc_info=True)
         await _wait_or_stop(stop_event, settings.macro_poll_interval_seconds)
+
+
+async def run_news_poller(stop_event: asyncio.Event | None = None) -> None:
+    stop_event = stop_event or asyncio.Event()
+    while not stop_event.is_set():
+        try:
+            async with AsyncSessionLocal() as db:
+                await fetch_and_persist_news(db)
+        except Exception:  # noqa: BLE001 — one bad cycle must not kill the poller
+            logger.warning("news_poll_cycle_failed", exc_info=True)
+        await _wait_or_stop(stop_event, settings.news_poll_interval_seconds)
 
 
 async def run_sentiment_recompute(stop_event: asyncio.Event | None = None) -> None:

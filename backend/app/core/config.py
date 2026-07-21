@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     sentiment_recompute_interval_seconds: float = 300.0  # 5min
     llm_explanation_interval_seconds: float = 1_800.0  # 30min
     llm_explanation_anchor_symbol: str = "BTCUSDT"
+    # RSS feeds have no rate-limit concern like Alpha Vantage, so this can
+    # poll far more often — see app/intelligence/news/.
+    news_poll_interval_seconds: float = 600.0  # 10min
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

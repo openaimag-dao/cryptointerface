@@ -33,6 +33,7 @@ from app.database.session import AsyncSessionLocal, dispose_engine, init_models
 from app.intelligence.scheduler.tasks import (
     run_llm_explanation_refresh,
     run_macro_poller,
+    run_news_poller,
     run_sentiment_recompute,
 )
 from app.services.binance.ws_client import ConnectionState
@@ -76,6 +77,7 @@ async def lifespan(app: FastAPI):
     )
     # Sprint 4: Intelligence Layer schedulers (app/intelligence/scheduler/).
     _background_tasks.append(asyncio.create_task(run_macro_poller(stop_event=_stop_event)))
+    _background_tasks.append(asyncio.create_task(run_news_poller(stop_event=_stop_event)))
     _background_tasks.append(asyncio.create_task(run_sentiment_recompute(stop_event=_stop_event)))
     _background_tasks.append(asyncio.create_task(run_llm_explanation_refresh(stop_event=_stop_event)))
 
@@ -96,9 +98,9 @@ app = FastAPI(
     description="Backend for the AIMAG AI trading terminal: a real-time Binance-backed Data "
     "Engine (REST + WebSocket ingestion, indicators, Postgres/Redis storage) feeding a "
     "deterministic AI Decision Engine (no LLM, no trade execution — see AI_ENGINE.md), a Sprint 4 "
-    "Intelligence Layer (macro/sentiment/LLM-explanation, see app/intelligence/), and a "
-    "Claude-backed AI Chat assistant. Portfolio/news/whales/backtesting still serve mock or "
-    "partial data pending a future sprint.",
+    "Intelligence Layer (macro/news/sentiment/LLM-explanation, see app/intelligence/), and a "
+    "Claude-backed AI Chat assistant. Portfolio/whales/backtesting still serve mock data pending "
+    "a future sprint.",
     version="0.2.0",
     lifespan=lifespan,
 )
@@ -134,16 +136,17 @@ app.include_router(chat.router)
 
 # Sprint 4: Intelligence Layer (app/intelligence/) — macro.router's
 # /indicators is real (/events is still a mock economic calendar);
-# sentiment/llm/dashboard_intelligence are entirely new and real.
+# news.router is real (RSS + deterministic classifier, no LLM per
+# article); sentiment/llm/dashboard_intelligence are entirely new and real.
 app.include_router(macro.router)
+app.include_router(news.router)
 app.include_router(sentiment.router)
 app.include_router(llm.router)
 app.include_router(dashboard_intelligence.router)
 
-# Still mock (portfolio, news, whales, backtesting) — out of scope until a
+# Still mock (portfolio, whales, backtesting) — out of scope until a
 # future sprint.
 app.include_router(portfolio.router)
-app.include_router(news.router)
 app.include_router(whales.router)
 app.include_router(backtesting.router)
 

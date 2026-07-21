@@ -1,10 +1,10 @@
 """Aggregates every scoring module into one weighted Market Score.
 
 Weights are fixed constants (not learned, not random) so the aggregate is
-as reproducible and auditable as each individual factor. `news` is still
-a Sprint 4 stub at zero weight (real news ingestion lands in a follow-up
-PR); `macro` moved from 0.00 to a real weight in Sprint 4 now that
-`score_macro()` reads a real snapshot — see that module's docstring.
+as reproducible and auditable as each individual factor. `macro` and
+`news` both moved from 0.00 to real weights in Sprint 4 now that
+`score_macro()`/`score_news()` read real snapshots — see those modules'
+docstrings.
 """
 
 from dataclasses import dataclass
@@ -24,20 +24,20 @@ from app.ai_engine.types import Direction, FactorScore, clamp, direction_from_sc
 # Must sum to 1.0. Trend/momentum/structure carry the most weight since
 # they're the most predictive, well-established technical factors;
 # volatility is intentionally low-weighted since it's directionally
-# ambiguous on its own. macro now carries a real weight (Sprint 4) — each
-# technical factor gave up a small slice (volatility was already minimal,
-# left untouched) to fund it. news is still a Sprint 4 stub at zero
-# weight pending real news ingestion.
+# ambiguous on its own. macro/news now both carry real weight (Sprint 4)
+# — each technical factor gave up a small slice again (volatility was
+# already minimal, left untouched) to fund news, same as macro's earlier
+# rebalance in this same sprint.
 FACTOR_WEIGHTS: dict[str, float] = {
-    "trend": 0.20,
-    "momentum": 0.16,
-    "structure": 0.16,
-    "oi": 0.14,
-    "volume": 0.11,
-    "funding": 0.09,
+    "trend": 0.18,
+    "momentum": 0.14,
+    "structure": 0.15,
+    "oi": 0.13,
+    "volume": 0.10,
+    "funding": 0.08,
     "volatility": 0.05,
     "macro": 0.09,
-    "news": 0.00,
+    "news": 0.08,
 }
 
 
@@ -59,7 +59,7 @@ def compute_market_score(ctx: MarketContext) -> MarketScoreResult:
         "funding": score_funding(ctx.funding_history),
         "oi": score_oi(ctx.closes, ctx.oi_history),
         "macro": score_macro(ctx.macro_snapshot),
-        "news": score_news(),
+        "news": score_news(ctx.news_snapshot),
     }
 
     weighted_sum = sum(factors[name].score * weight for name, weight in FACTOR_WEIGHTS.items())
