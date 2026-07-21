@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     binance_api_key: str = ""
     binance_api_secret: str = ""
 
+    # CoinGecko — public spot-market fallback used only when Binance is
+    # unreachable (e.g. geo-restricted egress). No funding rate/open
+    # interest equivalent, no WebSocket — REST-polled ticker + best-effort
+    # OHLC candles only. See app/services/coingecko/ and
+    # app/tasks/coingecko_fallback.py.
+    coingecko_base_url: str = "https://api.coingecko.com/api/v3"
+
     # Data engine
     symbols: str = ",".join(DEFAULT_SYMBOLS)
     timeframes: str = ",".join(DEFAULT_TIMEFRAMES)

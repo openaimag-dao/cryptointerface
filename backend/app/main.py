@@ -29,6 +29,7 @@ from app.core.redis import close_redis
 from app.database.session import AsyncSessionLocal, dispose_engine, init_models
 from app.services.binance.ws_client import ConnectionState
 from app.services.websocket.manager import connection_manager
+from app.tasks.coingecko_fallback import run_coingecko_fallback_poller
 from app.tasks.historical_loader import run_historical_backfill
 from app.tasks.live_feed import LiveFeedService
 from app.tasks.open_interest_poller import run_open_interest_poller
@@ -58,6 +59,13 @@ async def lifespan(app: FastAPI):
     _background_tasks.append(asyncio.create_task(run_historical_backfill(AsyncSessionLocal)))
     _background_tasks.append(asyncio.create_task(live_feed.start()))
     _background_tasks.append(asyncio.create_task(run_open_interest_poller(stop_event=_stop_event)))
+    # CoinGecko ticker fallback — dormant while the Binance WS is connected,
+    # only polls when it isn't (see app/tasks/coingecko_fallback.py).
+    _background_tasks.append(
+        asyncio.create_task(
+            run_coingecko_fallback_poller(broadcast=connection_manager.broadcast, stop_event=_stop_event)
+        )
+    )
 
     yield
 
