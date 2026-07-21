@@ -27,4 +27,4 @@ if [ ! -f .env ]; then
   echo "Created backend/.env from .env.example"
 fi
 
-exec uvicorn app.main:app --reload --port "${port}"
+exec uvicorn app.main:app --reload --reload-dir app --port "${port}"
