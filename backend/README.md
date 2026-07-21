@@ -446,6 +446,258 @@ symbol, on every request.
 | `GET /api/llm/explanation/{symbol}?interval=` | Real, computes + persists live |
 | `GET /api/dashboard/intelligence?symbol=&interval=` | Real; `aiExplanation` reads the scheduler's cached anchor-symbol report (fast enough to poll) |
 
+## Backtesting Engine (Sprint 5)
+
+`app/backtesting/` objectively evaluates the Sprint 3 AI Decision Engine
+(and, in the future, any other strategy following the same contract) by
+replaying it bar by bar over historical candles — analysis only, same as
+every other sprint: **no order is ever placed**, there's no Binance
+Trading API integration, and every computation is deterministic (no
+`random` anywhere outside the explicitly-seeded Monte Carlo utility, see
+below).
+
+```
+app/backtesting/
+  engine.py             orchestrates one run: validate -> bulk-load -> replay -> score -> persist
+  strategy_runner.py     replays analyze_market() bar by bar, no look-ahead (see below)
+  trade_simulator.py     turns Decision Engine output into simulated fills
+  performance.py          win rate, profit factor, expectancy, ...
+  risk_metrics.py          drawdown, Sharpe/Sortino/Calmar, recovery factor
+  statistics.py             shared stats helpers + Monte Carlo trade-shuffle
+  walk_forward.py            basic Train/Validation/Test fold splitting
+  optimizer.py                 parameter-search interface (not yet implemented)
+  report_generator.py           JSON/CSV export (PDF: architecture only)
+  models/                        internal dataclasses (Trade, Config, Results) —
+                                  distinct from app/models (DB) and app/schemas (API),
+                                  same separation app/ai_engine/types.py keeps
+  utils/                          timeframe/period arithmetic + the error hierarchy
+
+app/services/backtest_repository.py   persistence for the 5 new tables
+```
+
+### How it works
+
+1. **Validate** — symbol/timeframe/period must be one of the supported
+   combinations (`1m/5m/15m/1h/4h/1d` × `30/90/180/365` days), and the
+   resulting bar count must stay under `MAX_BACKTEST_BARS` (50,000) — a
+   pure-Python bar-by-bar replay that re-runs the full Decision Engine
+   every bar realistically does low hundreds to low thousands of
+   bars/second, so a single HTTP request shouldn't be allowed to run for
+   tens of minutes. Pick a shorter period or a coarser timeframe if you
+   hit this cap.
+2. **Bulk-load** — candles, funding, and open interest history are
+   fetched from the database **once** (not once per bar) via
+   `app/services/market_repository.py`'s `as_of`-aware queries, padded
+   with `DEFAULT_CANDLE_LOOKBACK` (250) extra bars of warm-up so the
+   first bar actually scored already has full indicator history.
+3. **Replay** — `strategy_runner.py` slides a fixed-size window over the
+   bulk-loaded data and calls `app.ai_engine.decision_engine.analyze_market()`
+   **completely unmodified** for every bar — the exact same function
+   `/api/ai/*` calls in real time. See "How look-ahead bias is avoided"
+   below for the guarantee this relies on.
+4. **Simulate** — `trade_simulator.py` turns each bar's decision into
+   fills: enters LONG/SHORT at the decision bar's close when the engine
+   returns a directional call with a risk plan, and exits at TP1 or SL,
+   whichever a later bar's high/low touches first (stop wins if both are
+   touched in the same bar — see the module's docstring for why).
+5. **Score** — `performance.py` and `risk_metrics.py` compute every
+   metric the spec asks for (below) from the resulting trade list.
+6. **Persist** — the run, its trades, its metrics, and its equity curve
+   are written to `backtest_runs`/`backtest_trades`/`backtest_metrics`/`equity_curve`.
+
+### How to add a strategy
+
+Today there is exactly one strategy: the unmodified Sprint 3 Decision
+Engine, recorded as `strategy_versions` row `v1-default-decision-engine`
+(a JSON audit snapshot of its tunable constants — Market Score factor
+weights, the confidence floor, ATR/R-multiple settings — for
+reproducibility, not yet used to vary behavior). To add a genuinely
+different strategy in the future:
+
+1. Give it something that produces the same shape `analyze_market()`
+   does — `direction`/`confidence`/a `risk` plan (`entry`/`stop`/`tp1`) —
+   `trade_simulator.py` only depends on that shape, not on
+   `AIDecision`/`RiskPlan` specifically.
+2. Have `strategy_runner.py` (or a sibling module) call your strategy
+   instead of/alongside `analyze_market()` per bar, still from the same
+   bulk-loaded, no-look-ahead window.
+3. Insert a new `strategy_versions` row describing it, and reference that
+   row's id from `backtest_runs.strategy_version_id`.
+
+`optimizer.py`'s `DEFAULT_PARAMETER_SPACE` already names the concrete
+parameters (Market Score weights, confidence threshold, R multiples, ATR
+multiplier) a future in-place variant of the *existing* strategy would
+tune — that's the more likely near-term path versus a wholly separate
+strategy implementation.
+
+### How metrics are calculated
+
+**Performance** (`performance.py`, from the closed trade list):
+
+| Metric | Formula |
+|---|---|
+| Total Return % | `net_profit / initial_balance * 100` |
+| Net Profit | `sum(trade.pnl)` |
+| Gross Profit / Gross Loss | `sum(winning pnls)` / `sum(losing pnls)` (loss is ≤ 0) |
+| Win Rate / Loss Rate | `winning_trades / total_trades * 100` (and the loss complement) |
+| Avg Win / Avg Loss | mean of winning/losing trade PnL |
+| Profit Factor | `gross_profit / abs(gross_loss)` (capped at 999 with zero losses — mathematically undefined, not infinite) |
+| Expectancy | `win_rate% * avg_win + loss_rate% * avg_loss` — expected $ per trade |
+| Avg Trade Duration | mean of `exit_time - entry_time` across trades |
+
+**Risk** (`risk_metrics.py`, from the trade-sequential equity curve —
+balance only changes when a trade closes, see `trade_simulator.py`'s
+"mark-to-close only" docstring):
+
+| Metric | Formula |
+|---|---|
+| Max Drawdown % | largest peak-to-trough drop in the trade-sequential balance series |
+| Recovery Factor | `net_profit / max_drawdown_$` (capped at 999 with zero drawdown) |
+| Sharpe Ratio | `mean(trade pnl%) / stdev(trade pnl%) * sqrt(trades_per_year)` — from trade-level returns, not a bar-level mark-to-market series (see below) |
+| Sortino Ratio | same as Sharpe, but the denominator is downside deviation only (returns below 0) |
+| Calmar Ratio | `annualized_return% / max_drawdown%`, where annualized return is CAGR from `total_return%` and `period_days` |
+| Risk/Reward | mean of each trade's *planned* R:R (`RiskPlan.risk_reward_tp1` at entry — the Decision Engine's own target, not the realized outcome) |
+
+Sharpe/Sortino are computed from each trade's `pnl_percent` in sequence,
+annualized by how many trades the run actually produced per year — not
+from a bar-by-bar mark-to-market equity series. Since the equity curve
+here only changes value when a trade closes (no intrabar unrealized P&L
+tracking, see the next section's limitations), a bar-level return series
+would be mostly zeros and would understate volatility in a way that
+doesn't reflect the strategy's real risk. This is a deliberate choice,
+not an oversight.
+
+**Equity Curve**: one point per trade close (balance, running drawdown %,
+cumulative PnL, trade count so far), plus a leading point at the run's
+start — exact, not downsampled, since trade count is naturally bounded
+(the simulator holds at most one position at a time).
+
+**Monte Carlo** (`statistics.py::monte_carlo_shuffle()` /
+`monte_carlo_drawdown_distribution()`): architecture for a future
+robustness check. Randomly reorders the *sequence* of realized trade
+PnLs — never invents or alters a value — to see how differently the
+equity curve's path (and therefore its drawdown) could have looked with
+the same trades in a different order. Deterministic given a seed
+(`random.Random(seed)`, default `42`): the same seed always reproduces
+the same reshuffling, satisfying "все вычисления должны быть
+воспроизводимыми" even for a randomized technique.
+
+### How look-ahead bias is avoided
+
+This is the correctness property the whole engine depends on, so it's
+worth stating precisely:
+
+- **Fixed-size sliding window, not a growing one.** Bar `i`'s
+  `MarketContext` is built from exactly `DEFAULT_CANDLE_LOOKBACK` (250)
+  candles ending at bar `i` — the *same* window size the real-time API
+  uses. Nothing after bar `i` is ever included.
+- **Funding/open-interest cut off at the bar's own timestamp**, via a
+  two-pointer scan that only ever advances forward as bar time increases
+  (`strategy_runner.py`'s `iter_decisions()`).
+- **Entry fills at the decision bar's close; exits are only checked
+  starting the *next* bar.** By the time a decision is known, that bar
+  has already closed — there's no more of it left to trade against. A
+  position opened from bar `i`'s decision is never checked for an exit
+  against bar `i`'s own high/low (`trade_simulator.py`'s docstring).
+- **Macro/News/Whale snapshots are always `None` during a backtest** —
+  see Limitations below for why, and confirm this is deliberate, not a
+  bug: passing today's "latest" reading into a bar from months ago would
+  be a severe, silent look-ahead leak.
+- **Verified, not just asserted**: `tests/test_backtest_strategy_runner.py`
+  and `tests/test_backtest_walk_forward.py` include automated regression
+  tests that truncate the *future* portion of a candle series and assert
+  every overlapping historical bar's decision is byte-identical to the
+  untruncated run. This was also verified manually against a live
+  Postgres instance during development.
+
+### Limitations of the current implementation
+
+- **Macro/News/Whale factors always read neutral in a backtest.** The
+  Sprint 4 Intelligence Layer's repositories only support "give me the
+  latest reading," not "give me what was known as of a past timestamp" —
+  and real News/Whale collection only started very recently, so there's
+  essentially no historical depth for a 30-365 day backtest window
+  anyway. Rather than leak "the latest news" into a bar from the past,
+  `strategy_runner.py` always passes `macro_snapshot=news_snapshot=whale_snapshot=None`,
+  the same neutral "no data yet" read every scoring module already falls
+  back to in real time. Closable in a future sprint once enough
+  historical Macro/News/Whale data has accumulated to build point-in-time
+  queries for them.
+- **One position at a time.** `TradeSimulatorConfig.allow_concurrent_positions`
+  exists as a config field but isn't implemented — the simulator always
+  waits for the current position to close before considering a new one.
+- **Trailing Stop / Break-Even / Partial Take-Profit are architecture
+  only.** `TradeSimulatorConfig` accepts and stores all three (and
+  `backtest_runs.config` persists them for the record), but the fill
+  loop in `trade_simulator.py` doesn't act on them yet — every trade
+  currently exits at a static TP1 or SL set at entry. Per the Sprint 5
+  spec, this is intentional scope for this stage.
+- **Mark-to-close equity, not mark-to-market.** Balance only updates
+  when a trade closes; there's no bar-by-bar unrealized-P&L tracking. See
+  "How metrics are calculated" above for how this shapes the Sharpe/Sortino
+  formula.
+- **Same-bar SL/TP conflict assumes the stop fills first.** If a single
+  bar's range touches both the stop and TP1, OHLC data alone can't say
+  which happened first intrabar — the simulator conservatively assumes
+  the worse outcome rather than guessing favorably.
+- **Optimizer is interface-only.** `optimizer.py`'s `Optimizer.run()`
+  raises `NotImplementedError` — no parameter search loop exists yet.
+- **Walk-Forward doesn't fit anything yet.** `walk_forward.py` reports
+  real Train/Validation/Test fold boundaries and scores each fold's Test
+  segment for real, but no parameter is actually tuned on Train/Validation
+  (there's nothing to tune until the Optimizer is real).
+- **PDF export is architecture-only.** `report_generator.py::generate_pdf_report()`
+  raises `NotImplementedError`; JSON and CSV export are fully implemented.
+- **`MAX_BACKTEST_BARS` (50,000) caps request size.** E.g. 1-minute
+  candles over 365 days (525,600 bars) exceed this and are rejected
+  up front with a clear message — pick a coarser timeframe or a shorter
+  period. See "How it works" above for the throughput reasoning.
+- **Measured throughput: ~100 bars/second.** A full 365-day/1h backtest
+  (8,761 bars, re-running the entire Decision Engine — every scoring
+  module, confidence, risk plan — each bar) took 84.8s end to end against
+  a local Postgres in testing. That scales roughly linearly: a
+  large-but-allowed request near `MAX_BACKTEST_BARS` (e.g. 1m candles
+  over 30 days, 43,200 bars) can be expected to take several minutes in a
+  single synchronous HTTP request. This is an accepted, documented
+  tradeoff for this sprint rather than a hidden one — a background-job
+  model (submit, poll for completion) would be the natural fix and is a
+  reasonable candidate for a future sprint, but every endpoint in this
+  API is synchronous today (`POST /run` blocks until the run completes),
+  consistent with the rest of the app's request/response style.
+
+### Database
+
+| Table | Purpose |
+|---|---|
+| `strategy_versions` | Named, versioned strategy config snapshots |
+| `backtest_runs` | One row per run: parameters, status, timing |
+| `backtest_trades` | One row per simulated trade |
+| `backtest_metrics` | One row per run: every performance + risk metric |
+| `equity_curve` | One row per trade close (+ a leading start-of-run point) |
+
+### API endpoints
+
+| Endpoint | Notes |
+|---|---|
+| `POST /api/backtesting/run` | Runs synchronously, returns the full report (run + performance + risk) |
+| `GET /api/backtesting/history?symbol=&limit=&offset=` | Past runs, newest first |
+| `GET /api/backtesting/report/{run_id}` | Run metadata + performance + risk |
+| `GET /api/backtesting/metrics/{run_id}` | Just performance + risk (lighter payload than `/report`) |
+| `GET /api/backtesting/trades/{run_id}?limit=&offset=` | The trade list |
+| `GET /api/backtesting/equity/{run_id}` | The equity curve |
+
+### Ready for Sprint 6 (Paper Trading)
+
+The module boundaries here were chosen with the next sprint in mind:
+`trade_simulator.py`'s fill logic (entry/exit rules, commission,
+slippage) is decoupled from `strategy_runner.py`'s bar replay — a Paper
+Trading engine driven by the *live* feed instead of historical bars can
+reuse the same `TradeSimulator`/`TradeSimulatorConfig`/`ClosedTrade`
+types unchanged, feeding it real-time decisions one at a time instead of
+a bulk-loaded historical array. `BacktestRunResult`/`PerformanceMetrics`/`RiskMetrics`
+are equally reusable for scoring a paper-trading session's live
+performance with the exact same formulas documented above.
+
 ## How to add a new coin
 
 1. Add the symbol to `SYMBOLS` in `.env` (comma-separated, Binance USDT-M

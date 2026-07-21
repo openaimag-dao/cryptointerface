@@ -52,7 +52,10 @@ live `/ws/market` WebSocket feed) — see
 Engine's Market Score/Confidence/Direction/Risk are computed. News, Whale
 Tracker, Macro, and Sentiment (Sprint 4's Intelligence Layer) are real
 too — see **[backend/README.md](backend/README.md)**'s "Intelligence
-Layer" section. Portfolio, Backtesting, and the Macro economic-calendar
-tab remain on mock data — out of scope until a future sprint. If Binance
-is unreachable from your network, a CoinGecko fallback kicks in
+Layer" section. Backtesting (Sprint 5) is real as well — it replays the
+same unmodified AI Decision Engine bar by bar over historical candles
+with no look-ahead bias, see backend/README.md's "Backtesting Engine"
+section. Portfolio and the Macro economic-calendar tab remain on mock
+data — out of scope until a future sprint. If Binance is unreachable
+from your network, a CoinGecko fallback kicks in
 automatically — see backend/README.md's "CoinGecko fallback" section.
