@@ -38,13 +38,17 @@ def period_to_bar_count(period_days: int, timeframe: str) -> int:
     return (period_days * 24 * 60 * 60) // bar_seconds
 
 
-def validate_backtest_params(symbol: str, timeframe: str, period_days: int) -> None:
+def validate_symbol_and_timeframe(symbol: str, timeframe: str) -> None:
     if not symbol or not symbol.isalnum():
         raise InvalidParametersError(f"Invalid symbol {symbol!r}")
     if timeframe not in SUPPORTED_TIMEFRAMES:
         raise InvalidParametersError(
             f"Unsupported timeframe {timeframe!r} — must be one of {', '.join(SUPPORTED_TIMEFRAMES)}"
         )
+
+
+def validate_backtest_params(symbol: str, timeframe: str, period_days: int) -> None:
+    validate_symbol_and_timeframe(symbol, timeframe)
     if period_days not in SUPPORTED_PERIOD_DAYS:
         raise InvalidParametersError(f"Unsupported period {period_days} days — must be one of {SUPPORTED_PERIOD_DAYS}")
     bar_count = period_to_bar_count(period_days, timeframe)
