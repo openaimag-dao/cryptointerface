@@ -1,7 +1,6 @@
-import { getMockSignals } from "@/lib/mock/signals";
-import { mockDelay } from "@/lib/mock/delay";
+import { apiFetch } from "@/lib/api-client";
 import type { AiSignal } from "@/types";
 
 export async function fetchSignals(): Promise<AiSignal[]> {
-  return mockDelay(getMockSignals());
+  return apiFetch<AiSignal[]>("/api/signals");
 }

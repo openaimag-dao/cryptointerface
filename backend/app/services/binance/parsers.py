@@ -50,7 +50,23 @@ class AggTradeEvent:
     is_buyer_maker: bool
 
 
-StreamEvent = KlineEvent | MarkPriceEvent | MiniTickerEvent | AggTradeEvent
+@dataclass(frozen=True)
+class LiquidationOrderEvent:
+    """One forced-liquidation fill. `side` is the side of the *position*
+    that got liquidated (LONG/SHORT) — Binance's own `S` field is the
+    order side of the forced order itself (a liquidated long is force-
+    SOLD, a liquidated short is force-BOUGHT), so it's inverted here to
+    match what the UI actually wants to show."""
+
+    symbol: str
+    side: str  # "LONG" | "SHORT" — the liquidated position's side
+    price: float
+    quantity: float
+    trade_time: int
+    event_time: int
+
+
+StreamEvent = KlineEvent | MarkPriceEvent | MiniTickerEvent | AggTradeEvent | LiquidationOrderEvent
 
 
 def _parse_kline(data: dict) -> KlineEvent:
@@ -105,11 +121,25 @@ def _parse_agg_trade(data: dict) -> AggTradeEvent:
     )
 
 
+def _parse_liquidation(data: dict) -> LiquidationOrderEvent:
+    order = data["o"]
+    price = float(order.get("ap") or order["p"])
+    return LiquidationOrderEvent(
+        symbol=order["s"],
+        side="LONG" if order["S"] == "SELL" else "SHORT",
+        price=price,
+        quantity=float(order["z"]),
+        trade_time=int(order["T"]),
+        event_time=int(data["E"]),
+    )
+
+
 _EVENT_PARSERS = {
     "kline": _parse_kline,
     "markPriceUpdate": _parse_mark_price,
     "24hrMiniTicker": _parse_mini_ticker,
     "aggTrade": _parse_agg_trade,
+    "forceOrder": _parse_liquidation,
 }
 
 

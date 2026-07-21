@@ -36,8 +36,7 @@ export function ChatWindow() {
               <div>
                 <h2 className="text-lg font-semibold text-foreground">AIMAG AI Assistant</h2>
                 <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                  Ask about market conditions, AI signals, or your portfolio. Currently running on placeholder
-                  responses.
+                  Ask about market conditions or AI signals — answers are grounded in the live watchlist snapshot.
                 </p>
               </div>
               <div className="grid w-full max-w-lg grid-cols-1 gap-2 sm:grid-cols-2">

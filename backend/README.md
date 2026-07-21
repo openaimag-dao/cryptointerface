@@ -7,8 +7,17 @@ over its own WebSocket (`/ws/market`). It also runs a deterministic AI
 Decision Engine on top of that data — see **[AI_ENGINE.md](./AI_ENGINE.md)**
 for how the Market Score, Confidence, Direction, and Risk plan are computed.
 Automatic trade execution is **out of scope**: the engine only ever analyzes
-and explains, it never places an order. `app/api/portfolio.py` and a few
-other routers still serve mock data pending a future sprint.
+and explains, it never places an order.
+
+`/api/signals` batches the AI Decision Engine across the whole watchlist
+(only symbols currently reading LONG/SHORT are included — a WAIT read isn't
+a "signal"). `/api/liquidations` is fed by Binance's `forceOrder` WebSocket
+stream in real time and persisted to Postgres; `/api/liquidations/heatmap`
+buckets recent liquidations by price for one symbol (`?symbol=`, defaults to
+`BTCUSDT`). `/api/chat/messages` is a real Anthropic Claude assistant
+grounded in a live watchlist snapshot (see "AI Chat" below) — the AI
+Decision Engine itself stays deterministic/no-LLM. `app/api/portfolio.py`
+and a few other routers still serve mock data pending a future sprint.
 
 ## How to run the project
 
@@ -60,9 +69,9 @@ directly (`NEXT_PUBLIC_API_BASE_URL` / `NEXT_PUBLIC_WS_URL` in `.env.local`).
 ```bash
 cd backend
 source .venv/bin/activate
-pytest                # 85 tests: indicators, Binance/CoinGecko REST clients, WS client, live feed,
-                       # historical loader, WS manager, and the AI Decision Engine (trend/momentum/
-                       # .../confidence/risk/decision)
+pytest                # 90 tests: indicators, Binance/CoinGecko REST clients, WS client, live feed,
+                       # historical loader, WS manager, the AI Decision Engine (trend/momentum/
+                       # .../confidence/risk/decision), and the Claude chat service
 ruff check .           # lint
 ruff format --check .  # formatting
 ```
@@ -178,6 +187,30 @@ free tier, so this is REST-polled, not push-based.
 default 7 symbols; add an entry there for any new coin you want this
 fallback to cover (an unmapped symbol just gets no fallback data, which is
 safe).
+
+### AI Chat (Anthropic Claude)
+
+`POST /api/chat/messages` (`app/services/claude_chat.py`) is a real Claude
+assistant — it is **not** part of the AI Decision Engine and never
+influences Market Score/Confidence/Direction/Risk, which stay fully
+deterministic. Each request:
+
+1. Builds a one-line-per-symbol snapshot of the current watchlist (price,
+   market score, confidence, direction) straight from the same
+   `build_market_context`/`analyze_market` the Decision Engine uses — no
+   separate data path, so the assistant never disagrees with what
+   `/api/signals` shows.
+2. Sends that snapshot as system-prompt context, plus the conversation's
+   prior turns (`history` in the request body — sessions live client-side
+   only, see `store/chat-store.ts`, so the backend stays stateless), to
+   `ANTHROPIC_CHAT_MODEL` (default `claude-sonnet-5`).
+3. Returns the reply as-is. The system prompt explicitly tells Claude not
+   to suggest placing any specific order.
+
+Set `ANTHROPIC_API_KEY` in `.env` to enable it (get one at
+[console.anthropic.com](https://console.anthropic.com/)). With no key set,
+the endpoint replies with a "not configured" message instead of erroring —
+same fail-open philosophy as the rest of the Data Engine.
 
 ## How to add a new coin
 

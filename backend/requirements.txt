@@ -6,6 +6,10 @@ python-dotenv==1.0.1
 httpx==0.27.2
 websockets==13.1
 
+# AI Chat (Anthropic Claude — the AI Decision Engine itself stays
+# deterministic/no-LLM, see AI_ENGINE.md)
+anthropic==0.69.0
+
 # Data engine
 sqlalchemy==2.0.35
 asyncpg==0.29.0

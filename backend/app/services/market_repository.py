@@ -8,13 +8,14 @@ creates duplicate rows.
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.candle import Candle
 from app.models.funding import FundingRate
 from app.models.indicator_value import IndicatorValue
+from app.models.liquidation import LiquidationEvent
 from app.models.market_stat import MarketStat
 from app.models.open_interest import OpenInterest
 from app.models.symbol import Symbol
@@ -281,3 +282,54 @@ async def get_latest_indicator_value(db: AsyncSession, symbol: str, interval: st
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
+
+
+async def insert_liquidation(
+    db: AsyncSession,
+    symbol: str,
+    side: str,
+    price: float,
+    quantity: float,
+    amount_usd: float,
+    timestamp: int,
+    exchange: str = "Binance",
+) -> None:
+    db.add(
+        LiquidationEvent(
+            symbol=symbol,
+            side=side,
+            price=price,
+            quantity=quantity,
+            amount_usd=amount_usd,
+            exchange=exchange,
+            timestamp=timestamp,
+        )
+    )
+    await db.commit()
+
+
+async def get_recent_liquidations(
+    db: AsyncSession, limit: int = 30, symbol: str | None = None
+) -> list[LiquidationEvent]:
+    stmt = select(LiquidationEvent)
+    if symbol is not None:
+        stmt = stmt.where(LiquidationEvent.symbol == symbol)
+    stmt = stmt.order_by(LiquidationEvent.timestamp.desc()).limit(limit)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def get_liquidation_totals_24h(db: AsyncSession) -> dict[str, float]:
+    """Sums `amount_usd` per side over the trailing 24h, in millisecond
+    epoch terms (matches `LiquidationEvent.timestamp`)."""
+    cutoff_ms = int(datetime.now(UTC).timestamp() * 1000) - 24 * 60 * 60 * 1000
+    stmt = (
+        select(LiquidationEvent.side, func.sum(LiquidationEvent.amount_usd))
+        .where(LiquidationEvent.timestamp >= cutoff_ms)
+        .group_by(LiquidationEvent.side)
+    )
+    result = await db.execute(stmt)
+    totals = {"LONG": 0.0, "SHORT": 0.0}
+    for side, total in result.all():
+        totals[side] = float(total or 0.0)
+    return totals

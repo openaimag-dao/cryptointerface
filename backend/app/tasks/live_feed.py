@@ -5,6 +5,7 @@ kline (in-progress) -> cache + broadcast only (no DB write, no indicator recompu
 markPrice         -> cache funding/mark price; persist only when the funding period rolls over
 miniTicker        -> cache + persist 24h stats, broadcast ticker update
 aggTrade          -> cache last trade price, broadcast a lightweight trade tick
+forceOrder        -> persist liquidation, broadcast it
 
 This keeps the DB write rate bounded regardless of tick frequency, while
 Redis (the hot-path cache) is updated on every message.
@@ -21,14 +22,23 @@ from app.database.session import AsyncSessionLocal
 from app.schemas.candle import Candle as CandleSchema
 from app.schemas.candle import CandleUpdate
 from app.schemas.funding import FundingRate
+from app.schemas.liquidation import LiquidationUpdate
 from app.schemas.market import TickerUpdate
 from app.schemas.trade import TradeUpdate
-from app.services.binance.parsers import AggTradeEvent, KlineEvent, MarkPriceEvent, MiniTickerEvent, StreamEvent
+from app.services.binance.parsers import (
+    AggTradeEvent,
+    KlineEvent,
+    LiquidationOrderEvent,
+    MarkPriceEvent,
+    MiniTickerEvent,
+    StreamEvent,
+)
 from app.services.binance.ws_client import BinanceWebSocketClient, ConnectionState
 from app.services.indicators.engine import compute_indicators
 from app.services.market_repository import (
     get_recent_candles,
     insert_funding,
+    insert_liquidation,
     to_candle_schema,
     upsert_candle,
     upsert_indicator_value,
@@ -85,6 +95,8 @@ class LiveFeedService:
             await self._handle_mini_ticker(event)
         elif isinstance(event, AggTradeEvent):
             await self._handle_agg_trade(event)
+        elif isinstance(event, LiquidationOrderEvent):
+            await self._handle_liquidation(event)
 
     async def _handle_kline(self, event: KlineEvent) -> None:
         engine_state.mark_kline(event.symbol)
@@ -196,6 +208,33 @@ class LiveFeedService:
             is_buyer_maker=event.is_buyer_maker,
         )
         await self._publish("trade", trade_update.model_dump(by_alias=True))
+
+    async def _handle_liquidation(self, event: LiquidationOrderEvent) -> None:
+        amount_usd = event.price * event.quantity
+        liquidation_update = LiquidationUpdate(
+            symbol=event.symbol,
+            side=event.side,
+            amount_usd=amount_usd,
+            price=event.price,
+            exchange="Binance",
+            timestamp=event.trade_time,
+        )
+        await self._publish("liquidation", liquidation_update.model_dump(by_alias=True))
+
+        async with AsyncSessionLocal() as db:
+            await insert_liquidation(
+                db,
+                symbol=event.symbol,
+                side=event.side,
+                price=event.price,
+                quantity=event.quantity,
+                amount_usd=amount_usd,
+                timestamp=event.trade_time,
+            )
+        logger.info(
+            "liquidation_recorded",
+            extra={"symbol": event.symbol, "side": event.side, "amount_usd": round(amount_usd, 2)},
+        )
 
 
 def _kline_event_to_kline_data(event: KlineEvent):

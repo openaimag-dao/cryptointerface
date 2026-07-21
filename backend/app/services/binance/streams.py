@@ -26,12 +26,18 @@ def agg_trade_stream(symbol: str) -> str:
     return f"{symbol.lower()}@aggTrade"
 
 
+def force_order_stream(symbol: str) -> str:
+    """Liquidation orders — Binance pushes one event per liquidation fill."""
+    return f"{symbol.lower()}@forceOrder"
+
+
 def build_streams(symbols: list[str], timeframes: list[str]) -> list[str]:
     streams: list[str] = []
     for symbol in symbols:
         streams.append(mini_ticker_stream(symbol))
         streams.append(mark_price_stream(symbol))
         streams.append(agg_trade_stream(symbol))
+        streams.append(force_order_stream(symbol))
         for timeframe in timeframes:
             streams.append(kline_stream(symbol, timeframe))
     return streams

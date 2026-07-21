@@ -1,13 +1,24 @@
 "use client";
 
-import { LIQUIDATION_TOTALS_24H } from "@/lib/mock/liquidations";
+import { useLiquidationTotals } from "@/hooks/use-liquidations";
 import { formatCompactNumber } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function LiquidationTotals() {
-  const { longUsd, shortUsd } = LIQUIDATION_TOTALS_24H;
+  const { data, isLoading } = useLiquidationTotals();
+
+  if (isLoading || !data) {
+    return (
+      <Card className="p-5">
+        <Skeleton className="h-24 w-full rounded-lg" />
+      </Card>
+    );
+  }
+
+  const { longUsd, shortUsd } = data;
   const total = longUsd + shortUsd;
-  const longPercent = (longUsd / total) * 100;
+  const longPercent = total > 0 ? (longUsd / total) * 100 : 50;
 
   return (
     <Card className="p-5">

@@ -14,3 +14,8 @@ export interface LiquidationHeatmapCell {
   price: number;
   intensity: number; // 0-1
 }
+
+export interface LiquidationTotals {
+  longUsd: number;
+  shortUsd: number;
+}
