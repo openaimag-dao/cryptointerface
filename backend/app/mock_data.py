@@ -1,18 +1,17 @@
 """Mock data generators for the endpoints that stay mock
-(portfolio, macro events, backtesting).
+(portfolio, macro events).
 
 Market data (assets, candles, funding, open interest, indicators) is
 served from the real Binance-backed Data Engine — see `app/services` and
 `app/api/market.py`, `candles.py`, `indicators.py`, `funding.py`,
-`open_interest.py`. News, signals, liquidations, whales, and chat are also
-real now — see `app/intelligence/`, `app/api/signals.py`, `liquidations.py`,
-`whales.py`, `chat.py`.
+`open_interest.py`. News, signals, liquidations, whales, chat, and
+backtesting are also real now — see `app/intelligence/`,
+`app/api/signals.py`, `liquidations.py`, `whales.py`, `chat.py`,
+`app/backtesting/`.
 """
 
-import time
 from datetime import UTC, datetime, timedelta
 
-from app.schemas.backtest import BacktestResult, EquityPoint
 from app.schemas.macro import MacroEvent
 from app.schemas.portfolio import PortfolioSummary, Position, TradeHistoryItem
 
@@ -83,32 +82,3 @@ def get_macro_events() -> list[MacroEvent]:
             previous="5.25% - 5.50%",
         ),
     ]
-
-
-def get_backtest_result(strategy: str, symbol: str, timeframe: str) -> BacktestResult:
-    points = 60
-    equity = 10_000.0
-    day_seconds = 60 * 60 * 24
-    start_time = int(time.time()) - points * day_seconds
-    curve = []
-
-    import math
-
-    for index in range(points):
-        equity *= 1 + (math.sin(index / 4) * 0.006 + 0.0045)
-        curve.append(EquityPoint(time=start_time + index * day_seconds, value=round(equity, 2)))
-
-    return BacktestResult(
-        id=f"bt-{strategy}-{symbol}-{timeframe}",
-        strategy=strategy,
-        symbol=symbol,
-        timeframe=timeframe,
-        period="Jan 2025 - Jul 2026",
-        total_trades=214,
-        win_rate=61.3,
-        profit_factor=1.84,
-        total_return_percent=round(((equity - 10_000) / 10_000) * 100, 1),
-        max_drawdown_percent=-14.2,
-        sharpe_ratio=1.62,
-        equity_curve=curve,
-    )

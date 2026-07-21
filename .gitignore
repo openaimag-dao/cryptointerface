@@ -51,3 +51,6 @@ backend/**/*.pyc
 
 # redis local persistence dump (created by `redis-server` during local dev/testing)
 backend/dump.rdb
+
+# pytest-cov data file (created by `pytest --cov`)
+backend/.coverage

@@ -64,6 +64,43 @@ class MarketContext:
         return self.candles[-1].time
 
 
+def build_market_context_from_data(
+    symbol: str,
+    interval: str,
+    candles: list[Candle],
+    funding_history: list[FundingRate],
+    oi_history: list[OpenInterest],
+    macro_snapshot: MacroSnapshot | None = None,
+    news_snapshot: NewsSnapshot | None = None,
+    whale_snapshot: WhaleSnapshot | None = None,
+) -> MarketContext:
+    """Pure, DB-free `MarketContext` construction — the exact same array
+    assembly `build_market_context()` does after its DB round-trips,
+    extracted so callers that already have the raw data in memory (namely
+    Sprint 5's `backtesting/strategy_runner.py`, which bulk-loads candle
+    history once and then replays it bar by bar) never need to touch the
+    database per bar. `analyze_market()` cannot tell the difference — a
+    `MarketContext` built here is structurally identical to one built by
+    `build_market_context()`, which is exactly what lets the Backtesting
+    Engine reuse the Decision Engine completely unmodified.
+    """
+    return MarketContext(
+        symbol=symbol,
+        interval=interval,
+        candles=candles,
+        opens=np.array([c.open for c in candles], dtype=float),
+        highs=np.array([c.high for c in candles], dtype=float),
+        lows=np.array([c.low for c in candles], dtype=float),
+        closes=np.array([c.close for c in candles], dtype=float),
+        volumes=np.array([c.volume for c in candles], dtype=float),
+        funding_history=funding_history,
+        oi_history=oi_history,
+        macro_snapshot=macro_snapshot,
+        news_snapshot=news_snapshot,
+        whale_snapshot=whale_snapshot,
+    )
+
+
 async def build_market_context(
     db: AsyncSession,
     symbol: str,
@@ -85,17 +122,12 @@ async def build_market_context(
     news_snapshot = await get_news_snapshot_for_symbol(db, symbol)
     whale_snapshot = await get_whale_snapshot_for_symbol(db, symbol)
 
-    return MarketContext(
-        symbol=symbol,
-        interval=interval,
-        candles=candles,
-        opens=np.array([c.open for c in candles], dtype=float),
-        highs=np.array([c.high for c in candles], dtype=float),
-        lows=np.array([c.low for c in candles], dtype=float),
-        closes=np.array([c.close for c in candles], dtype=float),
-        volumes=np.array([c.volume for c in candles], dtype=float),
-        funding_history=funding_history,
-        oi_history=oi_history,
+    return build_market_context_from_data(
+        symbol,
+        interval,
+        candles,
+        funding_history,
+        oi_history,
         macro_snapshot=macro_snapshot,
         news_snapshot=news_snapshot,
         whale_snapshot=whale_snapshot,
