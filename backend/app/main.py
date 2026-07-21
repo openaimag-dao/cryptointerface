@@ -109,14 +109,16 @@ app.include_router(websocket.router)
 # Sprint 3: deterministic AI Decision Engine (analysis only, no trade execution)
 app.include_router(ai.router)
 
-# Still mock this sprint (portfolio, news, whales, liquidations, macro, backtesting, chat).
-# signals.router is superseded by ai.router for AI analysis but stays mounted for now
-# since the frontend's other mock-data consumers haven't been migrated yet.
+# Real: signals.router batches the AI Decision Engine across the watchlist;
+# liquidations.router is fed by Binance's forceOrder WS stream.
 app.include_router(signals.router)
+app.include_router(liquidations.router)
+
+# Still mock (portfolio, news, whales, macro, backtesting, chat) — out of
+# scope until a future sprint.
 app.include_router(portfolio.router)
 app.include_router(news.router)
 app.include_router(whales.router)
-app.include_router(liquidations.router)
 app.include_router(macro.router)
 app.include_router(backtesting.router)
 app.include_router(chat.router)

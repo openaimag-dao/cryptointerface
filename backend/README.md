@@ -7,8 +7,15 @@ over its own WebSocket (`/ws/market`). It also runs a deterministic AI
 Decision Engine on top of that data — see **[AI_ENGINE.md](./AI_ENGINE.md)**
 for how the Market Score, Confidence, Direction, and Risk plan are computed.
 Automatic trade execution is **out of scope**: the engine only ever analyzes
-and explains, it never places an order. `app/api/portfolio.py` and a few
-other routers still serve mock data pending a future sprint.
+and explains, it never places an order.
+
+`/api/signals` batches the AI Decision Engine across the whole watchlist
+(only symbols currently reading LONG/SHORT are included — a WAIT read isn't
+a "signal"). `/api/liquidations` is fed by Binance's `forceOrder` WebSocket
+stream in real time and persisted to Postgres; `/api/liquidations/heatmap`
+buckets recent liquidations by price for one symbol (`?symbol=`, defaults to
+`BTCUSDT`). `app/api/portfolio.py` and a few other routers still serve mock
+data pending a future sprint.
 
 ## How to run the project
 

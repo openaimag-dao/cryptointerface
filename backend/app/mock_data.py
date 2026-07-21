@@ -12,89 +12,10 @@ import time
 from datetime import UTC, datetime, timedelta
 
 from app.schemas.backtest import BacktestResult, EquityPoint
-from app.schemas.liquidation import LiquidationEvent, LiquidationHeatmapCell
 from app.schemas.macro import MacroEvent, MacroIndicator
 from app.schemas.news import NewsItem
 from app.schemas.portfolio import PortfolioSummary, Position, TradeHistoryItem
-from app.schemas.signal import AiAnalysis, AiSignal
 from app.schemas.whale import WhaleTransaction
-
-_SIGNAL_SEEDS = [
-    {"symbol": "SOLUSDT", "direction": "LONG", "entry": 172.4, "confidence": 88},
-    {"symbol": "BTCUSDT", "direction": "LONG", "entry": 64280, "confidence": 76},
-    {"symbol": "ETHUSDT", "direction": "WAIT", "entry": 3412, "confidence": 54},
-    {"symbol": "LINKUSDT", "direction": "SHORT", "entry": 18.62, "confidence": 71},
-    {"symbol": "AVAXUSDT", "direction": "LONG", "entry": 38.4, "confidence": 82},
-    {"symbol": "DOGEUSDT", "direction": "SHORT", "entry": 0.1523, "confidence": 66},
-]
-
-_REASON_POOL = {
-    "LONG": [
-        "Price reclaimed the daily VWAP with rising volume",
-        "RSI bullish divergence confirmed on the 4H chart",
-        "Funding rate reset to neutral after long liquidations",
-    ],
-    "SHORT": [
-        "Rejection at key resistance with bearish engulfing candle",
-        "Funding rate overheated, crowded long positioning",
-        "Open interest spiking without price confirmation",
-    ],
-    "WAIT": [
-        "Price is consolidating inside a tight range",
-        "Conflicting signals between momentum and volume",
-        "Awaiting confirmation candle beyond range boundaries",
-    ],
-}
-
-
-def get_signals() -> list[AiSignal]:
-    signals = []
-    for index, seed in enumerate(_SIGNAL_SEEDS):
-        risk_unit = seed["entry"] * 0.018
-        direction = seed["direction"]
-        stop_loss = seed["entry"] + risk_unit if direction == "SHORT" else seed["entry"] - risk_unit
-        tp_multiplier = -1 if direction == "SHORT" else 1
-
-        signals.append(
-            AiSignal(
-                id=f"sig-{index}-{seed['symbol']}",
-                symbol=seed["symbol"],
-                direction=direction,
-                confidence=seed["confidence"],
-                entry=seed["entry"],
-                stop_loss=round(stop_loss, 4),
-                take_profit_1=round(seed["entry"] + tp_multiplier * risk_unit * 1.5, 4),
-                take_profit_2=round(seed["entry"] + tp_multiplier * risk_unit * 2.5, 4),
-                take_profit_3=round(seed["entry"] + tp_multiplier * risk_unit * 4, 4),
-                risk_reward=round(2 + (index % 3), 1),
-                reasons=_REASON_POOL[direction][:3],
-                created_at=(datetime.now(UTC) - timedelta(minutes=index * 37)).isoformat(),
-                timeframe=["15m", "1H", "4H"][index % 3],
-            )
-        )
-    return signals
-
-
-def get_ai_analysis(symbol: str) -> AiAnalysis:
-    signal = next((s for s in get_signals() if s.symbol == symbol), None)
-    direction = signal.direction if signal else "LONG"
-    entry = signal.entry if signal else 64280
-    risk_unit = entry * 0.018
-
-    return AiAnalysis(
-        symbol=symbol,
-        ai_score=signal.confidence if signal else 70,
-        direction=direction,
-        confidence=signal.confidence if signal else 70,
-        reasons=signal.reasons if signal else _REASON_POOL[direction][:3],
-        entry=entry,
-        stop_loss=signal.stop_loss if signal else entry - risk_unit,
-        take_profit_1=signal.take_profit_1 if signal else entry + risk_unit * 1.5,
-        take_profit_2=signal.take_profit_2 if signal else entry + risk_unit * 2.5,
-        take_profit_3=signal.take_profit_3 if signal else entry + risk_unit * 4,
-        risk=round(risk_unit, 4),
-        reward=round(risk_unit * 2.5, 4),
-    )
 
 
 def get_portfolio() -> PortfolioSummary:
@@ -209,45 +130,6 @@ def get_whale_transactions(count: int = 24) -> list[WhaleTransaction]:
             )
         )
     return transactions
-
-
-def get_liquidations(count: int = 30) -> list[LiquidationEvent]:
-    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "LINKUSDT", "AVAXUSDT"]
-    exchanges = ["Binance", "OKX", "Bybit", "Bitget"]
-    base_prices = {"BTCUSDT": 64280, "ETHUSDT": 3412, "SOLUSDT": 172, "LINKUSDT": 18.6, "AVAXUSDT": 38.4}
-
-    events = []
-    for index in range(count):
-        symbol = symbols[index % len(symbols)]
-        side = "SHORT" if index % 3 == 0 else "LONG"
-        events.append(
-            LiquidationEvent(
-                id=f"liq-{index}",
-                symbol=symbol,
-                side=side,
-                amount_usd=8_000 + (index * 2917) % 480_000,
-                price=round(base_prices[symbol] * (1 + ((index % 7) - 3) / 500), 2),
-                exchange=exchanges[index % len(exchanges)],
-                timestamp=(datetime.now(UTC) - timedelta(minutes=index * 6)).isoformat(),
-            )
-        )
-    return events
-
-
-def get_liquidation_heatmap(base_price: float = 64280, count: int = 40) -> list[LiquidationHeatmapCell]:
-    import math
-
-    cells = []
-    for index in range(count):
-        offset = (index - count / 2) * (base_price * 0.0025)
-        distance_factor = abs(index - count / 2) / (count / 2)
-        cells.append(
-            LiquidationHeatmapCell(
-                price=round(base_price + offset, 2),
-                intensity=round(max(0.08, 1 - distance_factor + math.sin(index) * 0.15), 2),
-            )
-        )
-    return cells
 
 
 def get_macro_indicators() -> list[MacroIndicator]:
