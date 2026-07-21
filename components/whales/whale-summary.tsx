@@ -20,11 +20,13 @@ export function WhaleSummary() {
     );
   }
 
-  const totalVolume = transactions.reduce((sum, tx) => sum + tx.amountUsd, 0);
-  const deposits = transactions.filter((tx) => tx.type === "DEPOSIT").reduce((sum, tx) => sum + tx.amountUsd, 0);
+  const totalVolume = transactions.reduce((sum, tx) => sum + tx.usdValue, 0);
+  const deposits = transactions
+    .filter((tx) => tx.direction === "TO_EXCHANGE")
+    .reduce((sum, tx) => sum + tx.usdValue, 0);
   const withdrawals = transactions
-    .filter((tx) => tx.type === "WITHDRAWAL")
-    .reduce((sum, tx) => sum + tx.amountUsd, 0);
+    .filter((tx) => tx.direction === "FROM_EXCHANGE")
+    .reduce((sum, tx) => sum + tx.usdValue, 0);
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

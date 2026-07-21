@@ -1,10 +1,11 @@
 """Aggregates every scoring module into one weighted Market Score.
 
 Weights are fixed constants (not learned, not random) so the aggregate is
-as reproducible and auditable as each individual factor. `macro` and
-`news` both moved from 0.00 to real weights in Sprint 4 now that
-`score_macro()`/`score_news()` read real snapshots — see those modules'
-docstrings.
+as reproducible and auditable as each individual factor. `macro`, `news`,
+and `whales` all carry real weight now (Sprint 4) — macro/news moved off
+their Sprint 3 stub weight, and `whales` is an entirely new factor (no
+stub existed for it) at a smaller weight to reflect its narrower coverage
+(only ETH/LINK have an Ethereum footprint — see `scoring/whales.py`).
 """
 
 from dataclasses import dataclass
@@ -19,25 +20,26 @@ from app.ai_engine.scoring.structure import score_structure
 from app.ai_engine.scoring.trend import score_trend
 from app.ai_engine.scoring.volatility import score_volatility
 from app.ai_engine.scoring.volume import score_volume
+from app.ai_engine.scoring.whales import score_whales
 from app.ai_engine.types import Direction, FactorScore, clamp, direction_from_score
 
 # Must sum to 1.0. Trend/momentum/structure carry the most weight since
 # they're the most predictive, well-established technical factors;
 # volatility is intentionally low-weighted since it's directionally
-# ambiguous on its own. macro/news now both carry real weight (Sprint 4)
-# — each technical factor gave up a small slice again (volatility was
-# already minimal, left untouched) to fund news, same as macro's earlier
-# rebalance in this same sprint.
+# ambiguous on its own. macro/news/whales all carry real weight (Sprint 4)
+# — each technical factor gave up another small slice to fund `whales`,
+# same rebalancing pattern used for macro and news earlier in this sprint.
 FACTOR_WEIGHTS: dict[str, float] = {
-    "trend": 0.18,
-    "momentum": 0.14,
-    "structure": 0.15,
-    "oi": 0.13,
-    "volume": 0.10,
+    "trend": 0.16,
+    "momentum": 0.13,
+    "structure": 0.14,
+    "oi": 0.12,
+    "volume": 0.09,
     "funding": 0.08,
     "volatility": 0.05,
     "macro": 0.09,
     "news": 0.08,
+    "whales": 0.06,
 }
 
 
@@ -60,6 +62,7 @@ def compute_market_score(ctx: MarketContext) -> MarketScoreResult:
         "oi": score_oi(ctx.closes, ctx.oi_history),
         "macro": score_macro(ctx.macro_snapshot),
         "news": score_news(ctx.news_snapshot),
+        "whales": score_whales(ctx.whale_snapshot),
     }
 
     weighted_sum = sum(factors[name].score * weight for name, weight in FACTOR_WEIGHTS.items())

@@ -1,12 +1,12 @@
 """Mock data generators for the endpoints that stay mock
-(portfolio, whales, macro events, backtesting).
+(portfolio, macro events, backtesting).
 
 Market data (assets, candles, funding, open interest, indicators) is
 served from the real Binance-backed Data Engine — see `app/services` and
 `app/api/market.py`, `candles.py`, `indicators.py`, `funding.py`,
-`open_interest.py`. News, signals, liquidations, and chat are also real
-now — see `app/intelligence/`, `app/api/signals.py`, `liquidations.py`,
-`chat.py`.
+`open_interest.py`. News, signals, liquidations, whales, and chat are also
+real now — see `app/intelligence/`, `app/api/signals.py`, `liquidations.py`,
+`whales.py`, `chat.py`.
 """
 
 import time
@@ -15,7 +15,6 @@ from datetime import UTC, datetime, timedelta
 from app.schemas.backtest import BacktestResult, EquityPoint
 from app.schemas.macro import MacroEvent
 from app.schemas.portfolio import PortfolioSummary, Position, TradeHistoryItem
-from app.schemas.whale import WhaleTransaction
 
 
 def get_portfolio() -> PortfolioSummary:
@@ -71,33 +70,6 @@ def get_portfolio() -> PortfolioSummary:
         open_positions=open_positions,
         history=history,
     )
-
-
-def get_whale_transactions(count: int = 24) -> list[WhaleTransaction]:
-    types = ["TRANSFER", "DEPOSIT", "WITHDRAWAL", "SWAP"]
-    symbols = ["BTC", "ETH", "SOL", "USDT", "LINK"]
-    exchanges = ["Binance", "Coinbase", "OKX", "Bybit", None]
-
-    transactions = []
-    for index in range(count):
-        symbol = symbols[index % len(symbols)]
-        amount = 50 + (index * 137) % 900
-        price = {"BTC": 64280, "ETH": 3412, "SOL": 172, "USDT": 1, "LINK": 18.6}[symbol]
-        transactions.append(
-            WhaleTransaction(
-                id=f"whale-{index}",
-                symbol=symbol,
-                type=types[index % len(types)],
-                amount=amount,
-                amount_usd=round(amount * price * (10 if symbol == "BTC" else 1)),
-                from_address=f"0x{(index * 291 + 173) % 999999:06x}",
-                to_address=f"0x{(index * 71) % 999999:06x}",
-                exchange=exchanges[index % len(exchanges)],
-                timestamp=(datetime.now(UTC) - timedelta(minutes=index * 14)).isoformat(),
-                tx_hash=f"0x{(index * 928371 + 5555):010x}",
-            )
-        )
-    return transactions
 
 
 def get_macro_events() -> list[MacroEvent]:

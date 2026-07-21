@@ -1,18 +1,21 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from app.schemas.base import CamelModel
 
-WhaleTxType = Literal["TRANSFER", "DEPOSIT", "WITHDRAWAL", "SWAP"]
+WalletType = Literal["EXCHANGE", "UNKNOWN"]
+WhaleDirection = Literal["TO_EXCHANGE", "FROM_EXCHANGE"]
 
 
-class WhaleTransaction(BaseModel):
+class WhaleTransaction(CamelModel):
     id: str
-    symbol: str
-    type: WhaleTxType
+    asset: str
     amount: float
-    amount_usd: float
+    usd_value: float
+    wallet_type: WalletType
+    direction: WhaleDirection
+    exchange: str | None
+    confidence: float
     from_address: str
     to_address: str
-    exchange: str | None
-    timestamp: str
     tx_hash: str
+    timestamp: str

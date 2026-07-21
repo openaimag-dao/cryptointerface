@@ -44,10 +44,12 @@ async def test_compute_sentiment_blends_all_five_categories(db_session):
     assert 0.0 <= result.overall_score <= 100.0
     assert 0.0 <= result.confidence <= 100.0
     assert result.direction in ("LONG", "SHORT", "WAIT")
-    # News/whales are still Sprint 4 stubs — zero confidence, zero weight.
+    # No news articles or whale-covered-symbol data seeded in this test's
+    # DB — both categories correctly read neutral/zero-confidence, but
+    # both now carry real weight (unlike the old Sprint 4 stubs).
     assert result.breakdown["news"].confidence == 0.0
     assert result.breakdown["whales"].confidence == 0.0
-    assert CATEGORY_WEIGHTS["whales"] == 0.0
+    assert CATEGORY_WEIGHTS["whales"] > 0.0
 
 
 @pytest.mark.asyncio

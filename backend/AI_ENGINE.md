@@ -73,19 +73,20 @@ point budget for each module is documented in its own docstring — see
 
 ## 1. Market Score — `market_score.py`
 
-The Market Score is a fixed-weight sum of all nine factor scores:
+The Market Score is a fixed-weight sum of all ten factor scores:
 
 | Factor       | Weight | Why |
 |--------------|-------:|-----|
-| trend        | 0.18   | Most predictive, well-established technical factor |
-| momentum     | 0.14   | Confirms/leads trend |
-| structure    | 0.15   | Support/resistance and breakouts matter as much as trend |
-| oi           | 0.13   | Open interest confirms whether a move has real conviction |
-| volume       | 0.10   | Confirms participation behind a move |
+| trend        | 0.16   | Most predictive, well-established technical factor |
+| momentum     | 0.13   | Confirms/leads trend |
+| structure    | 0.14   | Support/resistance and breakouts matter as much as trend |
+| oi           | 0.12   | Open interest confirms whether a move has real conviction |
+| volume       | 0.09   | Confirms participation behind a move |
 | funding      | 0.08   | Positioning/sentiment signal, contrarian at extremes |
 | volatility   | 0.05   | Directionally ambiguous on its own — low weight by design |
 | macro        | 0.09   | Real as of Sprint 4 — DXY/Gold/S&P500/NASDAQ/VIX/US10Y/Fear&Greed, see `scoring/macro.py` |
 | news         | 0.08   | Real as of Sprint 4 — RSS ingestion + deterministic classifier, see `scoring/news.py` |
+| whales       | 0.06   | Real as of Sprint 4 — Etherscan-tracked exchange-wallet transfers (ETH/LINK only), see `scoring/whales.py` |
 
 ```
 market_score = clamp( sum(factor.score * weight for each factor) )
@@ -94,13 +95,15 @@ market_direction = direction_from_score(market_score)
 
 Weights are hardcoded constants (`FACTOR_WEIGHTS` in `market_score.py`),
 not learned or tuned by any statistical process — that's what makes the
-aggregate as reproducible and auditable as each individual factor. Both
-`macro` and `news` moved off `0.00` in Sprint 4 exactly the way this
-section originally described: each stub's body was replaced (they now
-read `MarketContext.macro_snapshot`/`news_snapshot`, populated by
+aggregate as reproducible and auditable as each individual factor. `macro`
+and `news` moved off `0.00` in Sprint 4 exactly the way this section
+originally described: each stub's body was replaced (they now read
+`MarketContext.macro_snapshot`/`news_snapshot`, populated by
 `app/intelligence/` — see `backend/README.md`'s "Intelligence Layer"
-section) and every other technical factor gave up a small slice of
-weight to fund them; nothing else in the engine changed.
+section). `whales` is a genuinely new factor (Sprint 3 had no stub for
+it) added following the exact same `FactorScore` contract as every other
+factor. Every other technical factor gave up a small slice of weight to
+fund the three; nothing else in the engine changed.
 
 ## 2. Confidence Engine — `confidence_engine.py`
 
@@ -230,17 +233,20 @@ module.
   classifier (`app/intelligence/news/`, no LLM call per article — see
   that module's docstring for why), replacing the neutral stub, with
   `FACTOR_WEIGHTS["news"]` raised from `0.00` to `0.08`.
+- **`whales.py`** — done: real Etherscan-tracked transfers touching known
+  exchange wallets (`app/intelligence/whales/`), classified
+  deterministically as deposits/withdrawals. A genuinely new module
+  (Sprint 3 had no stub to replace), wired into `FACTOR_WEIGHTS["whales"]`
+  at `0.06`. Coverage is limited to ETH/LINK (assets with an Ethereum
+  footprint) — see that module's docstring.
 - **Sentiment Engine** (`app/intelligence/sentiment/`) — done: a layer
   *above* this engine that blends Technical (this engine's own Market
-  Score/Confidence) with Macro, real Liquidations, real News, and a
-  stubbed Whales category into one overall read for `/api/sentiment` and
-  the Dashboard's Intelligence Card. It never feeds back into
+  Score/Confidence) with real Macro, real Liquidations, real News, and
+  real Whales into one overall read for `/api/sentiment` and the
+  Dashboard's Intelligence Card. It never feeds back into
   `market_score.py`.
 - **LLM Explanation Layer** (`app/intelligence/llm/`) — done: takes an
   already-computed `AIDecision` + Sentiment breakdown and turns it into
   narrative prose via forced Claude tool-use (`/api/llm/explanation/{symbol}`).
   `direction`/`confidence` are copied from the engine, never set by the
   model — it reads this engine's output, never feeds back into it.
-- **Whale-wallet analysis**: real on-chain transfer tracking — still
-  pending, a follow-up PR. The Sentiment Engine's `whales` category is
-  already wired for it at zero weight.

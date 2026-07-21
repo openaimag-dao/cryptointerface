@@ -117,6 +117,20 @@ class NewsSnapshot:
 
 
 @dataclass(frozen=True)
+class WhaleSnapshot:
+    """Recent large on-chain transfers relevant to one asset, built by
+    `app/services/whale_repository.py::get_whale_snapshot_for_symbol()`
+    and consumed by `scoring/whales.py::score_whales()`. Withdrawals from
+    known exchange wallets (`from_exchange_usd`) read as accumulation
+    (bullish); deposits into them (`to_exchange_usd`) read as distribution/
+    selling pressure (bearish) — see `app/intelligence/whales/classifier.py`."""
+
+    event_count: int
+    to_exchange_usd: float
+    from_exchange_usd: float
+
+
+@dataclass(frozen=True)
 class FactorScore:
     """One scoring module's read on the market: a 0-100 score, the
     direction that score implies, how strongly it's expressed, and the

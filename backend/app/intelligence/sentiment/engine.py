@@ -10,12 +10,11 @@ Engine — trading-relevant Direction/Confidence still come from
 `app.ai_engine` alone (`/api/ai/*`, `/api/signals`); this is a separate,
 explanatory view for the Dashboard Intelligence Card and `/api/sentiment`.
 
-Whales is still a Sprint 4 stub (real on-chain tracking lands in a
-follow-up PR) — it contributes a neutral, zero-weighted read so the
-overall blend is unaffected until real data lands, the same pattern
-`app.ai_engine` used for macro/news in Sprint 3. News is real as of this
-PR (RSS ingestion + a deterministic classifier — see
-`app/intelligence/news/`).
+All five categories are real as of this PR. Whales (`app/intelligence/whales/`)
+is narrower than the others — only ETH/LINK have an Ethereum footprint
+this Etherscan-based approach can see — so symbols outside that coverage
+simply read neutral for that category, same tolerance every other Sprint
+4 module has for missing data.
 """
 
 from dataclasses import dataclass
@@ -26,20 +25,20 @@ from app.ai_engine.decision_engine import analyze_market
 from app.ai_engine.market_context import build_market_context
 from app.ai_engine.scoring.macro import score_macro
 from app.ai_engine.scoring.news import score_news
+from app.ai_engine.scoring.whales import score_whales
 from app.ai_engine.types import Direction, FactorScore, clamp, direction_from_score
 from app.intelligence.sentiment.liquidation_factor import score_liquidations
 from app.services.market_repository import get_liquidation_totals_24h
 
 # Must sum to 1.0. Technical carries the most weight since it's the only
-# category backed by a full deterministic model; Macro/Liquidations/News
-# are real-but-narrower signals; Whales is a Sprint 4 stub at zero weight
-# until real ingestion lands (see module docstring).
+# category backed by a full deterministic model; Macro/Liquidations/News/
+# Whales are all real-but-narrower signals now (see module docstring).
 CATEGORY_WEIGHTS: dict[str, float] = {
-    "technical": 0.55,
-    "macro": 0.20,
-    "liquidations": 0.15,
-    "news": 0.10,
-    "whales": 0.00,
+    "technical": 0.50,
+    "macro": 0.18,
+    "liquidations": 0.13,
+    "news": 0.09,
+    "whales": 0.10,
 }
 
 
@@ -75,15 +74,6 @@ def _from_factor_score(factor: FactorScore) -> SentimentFactor:
     )
 
 
-def _whales_stub() -> SentimentFactor:
-    return SentimentFactor(
-        score=50.0,
-        direction="WAIT",
-        confidence=0.0,
-        reasons=["Whale-wallet tracking is not yet integrated — neutral, zero-weight Sprint 4 stub"],
-    )
-
-
 async def compute_sentiment(db: AsyncSession, symbol: str, interval: str) -> SentimentResult | None:
     """Returns None if there isn't enough candle history yet for the
     Technical factor (same "no data yet" gate as `/api/signals`)."""
@@ -102,7 +92,7 @@ async def compute_sentiment(db: AsyncSession, symbol: str, interval: str) -> Sen
     liquidation_totals = await get_liquidation_totals_24h(db)
     liquidations = _from_factor_score(score_liquidations(liquidation_totals))
     news = _from_factor_score(score_news(ctx.news_snapshot))
-    whales = _whales_stub()
+    whales = _from_factor_score(score_whales(ctx.whale_snapshot))
 
     breakdown: dict[str, SentimentFactor] = {
         "technical": technical,
@@ -117,7 +107,7 @@ async def compute_sentiment(db: AsyncSession, symbol: str, interval: str) -> Sen
     overall_direction = direction_from_score(overall_score)
 
     reasons: list[str] = []
-    for name in ("technical", "macro", "liquidations", "news"):
+    for name in ("technical", "macro", "liquidations", "news", "whales"):
         reasons.extend(breakdown[name].reasons[:2])
 
     return SentimentResult(

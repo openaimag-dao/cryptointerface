@@ -10,6 +10,7 @@ from app.models.news import NewsArticle
 from app.models.open_interest import OpenInterest
 from app.models.sentiment import SentimentScore
 from app.models.symbol import Symbol
+from app.models.whale import WhaleEvent
 
 __all__ = [
     "AIAnalysis",
@@ -24,4 +25,5 @@ __all__ = [
     "OpenInterest",
     "SentimentScore",
     "Symbol",
+    "WhaleEvent",
 ]

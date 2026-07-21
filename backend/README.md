@@ -225,9 +225,8 @@ same fail-open philosophy as the rest of the Data Engine.
 
 `app/intelligence/` sits alongside the Data Engine and AI Decision Engine —
 analysis only, same as everywhere else in this app: nothing here ever
-places an order. This sprint ships Macro, News, Sentiment, and LLM
-Explanation; Whales (on-chain transfer tracking) is still a Sprint 4 stub
-— see the Sentiment Engine's `whales` category — pending a follow-up PR.
+places an order. This sprint ships Macro, News, Whales, Sentiment, and LLM
+Explanation — all five categories are real, see below.
 
 ```
 app/intelligence/
@@ -240,19 +239,24 @@ app/intelligence/
     fetcher.py          httpx fetch + feedparser parse, per source
     classifier.py        deterministic keyword sentiment/impact/symbols/category
     service.py            fetch_and_persist_news() — one poll cycle
+  whales/
+    addresses.py         curated list of known exchange wallets to watch
+    providers.py           Etherscan REST client (native + ERC-20 transfers)
+    classifier.py            deterministic deposit/withdrawal classification
+    service.py                 fetch_and_persist_whale_events() — one poll cycle
   sentiment/
     engine.py           compute_sentiment() — blends 5 categories
     liquidation_factor.py  real Binance liquidation data -> a FactorScore
   llm/
     explanation.py      build_llm_explanation() — Claude, forced tool-use
   scheduler/
-    tasks.py             4 background loops, see app/main.py's lifespan
+    tasks.py             5 background loops, see app/main.py's lifespan
   cache/                 Redis key templates + TTLs for this layer
 
 app/services/
-  macro_repository.py, news_repository.py, sentiment_repository.py,
-  llm_repository.py
-    persistence for the four new tables (macro_data, news,
+  macro_repository.py, news_repository.py, whale_repository.py,
+  sentiment_repository.py, llm_repository.py
+    persistence for the five new tables (macro_data, news, whale_events,
     sentiment_scores, llm_reports) — same upsert/append-only patterns as
     market_repository.py
 ```
@@ -324,6 +328,50 @@ reads that snapshot and now carries real weight (`0.08`) in
 `app/intelligence/news/sources.py`. Nothing else needs to change —
 `service.py` iterates the registry on every poll cycle.
 
+### Whale Engine
+
+Tracks large on-chain transfers touching known exchange wallets, using
+Etherscan's free-tier REST API (`ETHERSCAN_API_KEY` in `.env` — get one at
+[etherscan.io/apis](https://etherscan.io/apis)). Etherscan's free tier has
+no chain-wide "large transactions" firehose — it's address-centric
+(`txlist`/`tokentx` per address) — so this watches a curated list of
+publicly-labeled exchange wallets (`app/intelligence/whales/addresses.py`:
+Binance, Coinbase, Kraken, OKX) rather than scanning the whole chain.
+Coverage is therefore limited to assets with an Ethereum footprint: native
+ETH and one ERC-20 (LINK). BTC, SOL, DOGE, XRP, BNB etc. have no Ethereum
+presence and aren't covered by this approach.
+
+Every `WHALE_POLL_INTERVAL_SECONDS` (default 5min) cycle,
+`service.py::fetch_and_persist_whale_events()` fetches native + token
+transactions for each watched address, and `classifier.py` deterministically
+labels each transfer:
+
+- Transfer **to** a known exchange wallet (and not from one) -> `TO_EXCHANGE`
+  ("deposit", often selling pressure), confidence `90`
+- Transfer **from** a known exchange wallet (and not to one) -> `FROM_EXCHANGE`
+  ("withdrawal", often accumulation), confidence `90`
+- Both sides are known exchanges (inter-exchange rebalancing) -> `TO_EXCHANGE`
+  at a lower confidence (`40`) — real but a less informative signal
+- Neither side is a known exchange -> not classified (this free-tier
+  approach has no basis to call it a "whale" event either way)
+
+USD value is computed from the same live ticker prices the Data Engine
+already tracks (`market_repository.get_market_stat`), filtered to
+`WHALE_MIN_USD_THRESHOLD` (default $250k) before persisting to
+`whale_events` (`app/models/whale.py`, deduped on `tx_hash`).
+`app/services/whale_repository.py::get_whale_snapshot_for_symbol()` sums
+24h deposit/withdrawal USD by direction; `app/ai_engine/scoring/whales.py::score_whales()`
+reads that snapshot — heavy withdrawals read as accumulation (bullish),
+heavy deposits read as distribution (bearish) — and carries real weight
+(`0.06`) in `market_score.py`'s `FACTOR_WEIGHTS`. This is a new scoring
+module (Sprint 3 had no whales stub to replace), added following the same
+`FactorScore` contract as every other factor.
+
+**To watch a new exchange wallet**: add one `WatchedAddress` to
+`app/intelligence/whales/addresses.py`. **To track a new ERC-20 asset**:
+add its contract address to `TOKEN_CONTRACTS` in the same file and its
+symbol mapping to `SYMBOL_TO_ASSET` in `whale_repository.py`.
+
 ### Sentiment Engine
 
 `app/intelligence/sentiment/engine.py::compute_sentiment()` blends 5
@@ -334,11 +382,11 @@ Engine:
 
 | Category | Weight | Source |
 |---|---:|---|
-| Technical | 0.55 | The Decision Engine's own Market Score/Confidence (`analyze_market()`) |
-| Macro | 0.20 | `score_macro()` — same real feed as above |
-| Liquidations | 0.15 | Real: trailing-24h long/short totals, contrarian read (heavy long liqs -> mild bullish, same "contrarian at extremes" logic `scoring/funding.py` already uses) |
-| News | 0.10 | Real: `score_news()` — same real feed as above |
-| Whales | 0.00 | Stub — neutral, `0%` confidence, pending on-chain tracking |
+| Technical | 0.50 | The Decision Engine's own Market Score/Confidence (`analyze_market()`) |
+| Macro | 0.18 | `score_macro()` — same real feed as above |
+| Liquidations | 0.13 | Real: trailing-24h long/short totals, contrarian read (heavy long liqs -> mild bullish, same "contrarian at extremes" logic `scoring/funding.py` already uses) |
+| News | 0.09 | Real: `score_news()` — same real feed as above |
+| Whales | 0.10 | Real: `score_whales()` — same real feed as above (ETH/LINK only, see Whale Engine above) |
 
 `overall_score`/`confidence` are the weight-blended sum/average across
 all 5; `direction` is derived from `overall_score` the same
@@ -365,7 +413,7 @@ deliberately narrow:
 
 ### Scheduler
 
-Four background loops (`app/intelligence/scheduler/tasks.py`), wired
+Five background loops (`app/intelligence/scheduler/tasks.py`), wired
 into `main.py`'s lifespan alongside the Data Engine's existing pollers —
 each is a `while not stop_event.is_set()` loop, one bad cycle never
 crashing the loop:
@@ -374,6 +422,7 @@ crashing the loop:
 |---|---|---|
 | `run_macro_poller` | `MACRO_POLL_INTERVAL_SECONDS` | 6h |
 | `run_news_poller` | `NEWS_POLL_INTERVAL_SECONDS` | 10min |
+| `run_whale_poller` | `WHALE_POLL_INTERVAL_SECONDS` | 5min |
 | `run_sentiment_recompute` (every watchlist symbol) | `SENTIMENT_RECOMPUTE_INTERVAL_SECONDS` | 5min |
 | `run_llm_explanation_refresh` (`LLM_EXPLANATION_ANCHOR_SYMBOL` only) | `LLM_EXPLANATION_INTERVAL_SECONDS` | 30min |
 
@@ -392,6 +441,7 @@ symbol, on every request.
 | `GET /api/news?limit=&symbol=&category=` | Real, filterable list |
 | `GET /api/news/latest?limit=` | Real, most recent N articles across all sources |
 | `GET /api/news/search?q=&limit=` | Real, title/summary keyword search |
+| `GET /api/whales/transactions?count=&asset=` | Real, most recent tracked transfers (ETH/LINK only) |
 | `GET /api/sentiment?symbol=&interval=` | Real, computes + persists on every call |
 | `GET /api/llm/explanation/{symbol}?interval=` | Real, computes + persists live |
 | `GET /api/dashboard/intelligence?symbol=&interval=` | Real; `aiExplanation` reads the scheduler's cached anchor-symbol report (fast enough to poll) |

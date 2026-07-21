@@ -45,12 +45,14 @@ cp .env.example .env.local           # NEXT_PUBLIC_API_BASE_URL / NEXT_PUBLIC_WS
 npm install && npm run dev
 ```
 
-Dashboard, Markets, the price chart, and the AI Analysis panel all pull
-real data from the backend (REST + a live `/ws/market` WebSocket feed) —
-see **[backend/AI_ENGINE.md](backend/AI_ENGINE.md)** for how the AI
-Decision Engine's Market Score/Confidence/Direction/Risk are computed.
-Portfolio, Signals, News, Whale Tracker, Liquidations, Macro,
-Backtesting, and AI Chat remain on mock data — out of scope until a
-future sprint. If Binance is unreachable from your network, a CoinGecko
-fallback kicks in automatically — see backend/README.md's "CoinGecko
-fallback" section.
+Dashboard, Markets, the price chart, the AI Analysis panel, Signals,
+Liquidations, and AI Chat all pull real data from the backend (REST + a
+live `/ws/market` WebSocket feed) — see
+**[backend/AI_ENGINE.md](backend/AI_ENGINE.md)** for how the AI Decision
+Engine's Market Score/Confidence/Direction/Risk are computed. News, Whale
+Tracker, Macro, and Sentiment (Sprint 4's Intelligence Layer) are real
+too — see **[backend/README.md](backend/README.md)**'s "Intelligence
+Layer" section. Portfolio, Backtesting, and the Macro economic-calendar
+tab remain on mock data — out of scope until a future sprint. If Binance
+is unreachable from your network, a CoinGecko fallback kicks in
+automatically — see backend/README.md's "CoinGecko fallback" section.

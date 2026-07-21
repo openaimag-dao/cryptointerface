@@ -69,6 +69,14 @@ class Settings(BaseSettings):
     # poll far more often — see app/intelligence/news/.
     news_poll_interval_seconds: float = 600.0  # 10min
 
+    # Whale Engine (app/intelligence/whales/) — Etherscan free tier (5
+    # req/sec, 100k/day, get a key at https://etherscan.io/apis). Leave
+    # blank to disable; the poller then simply persists nothing. Only
+    # transfers at or above this USD value are persisted.
+    etherscan_api_key: str = ""
+    whale_poll_interval_seconds: float = 300.0  # 5min
+    whale_min_usd_threshold: float = 250_000.0
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

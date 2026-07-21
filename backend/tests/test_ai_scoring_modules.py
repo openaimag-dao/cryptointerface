@@ -10,7 +10,8 @@ from app.ai_engine.scoring.oi import score_oi
 from app.ai_engine.scoring.structure import score_structure
 from app.ai_engine.scoring.volatility import score_volatility
 from app.ai_engine.scoring.volume import score_volume
-from app.ai_engine.types import MacroIndicatorReading, MacroSnapshot, NewsSnapshot
+from app.ai_engine.scoring.whales import score_whales
+from app.ai_engine.types import MacroIndicatorReading, MacroSnapshot, NewsSnapshot, WhaleSnapshot
 
 
 def _uptrend(n: int = 300) -> np.ndarray:
@@ -220,6 +221,54 @@ def test_news_deterministic_same_input_same_output():
     snapshot = NewsSnapshot(article_count=3, avg_sentiment_score=70.0, avg_impact=60.0)
     first = score_news(snapshot)
     second = score_news(snapshot)
+
+    assert first.score == second.score
+    assert first.reasons == second.reasons
+
+
+def test_whales_no_snapshot_is_neutral():
+    factor = score_whales(None)
+
+    assert factor.score == 50.0
+    assert factor.direction == "WAIT"
+
+
+def test_whales_zero_events_is_neutral():
+    factor = score_whales(WhaleSnapshot(event_count=0, to_exchange_usd=0.0, from_exchange_usd=0.0))
+
+    assert factor.score == 50.0
+
+
+def test_whales_thin_activity_stays_neutral():
+    snapshot = WhaleSnapshot(event_count=1, to_exchange_usd=50_000.0, from_exchange_usd=0.0)
+    factor = score_whales(snapshot)
+
+    assert factor.score == 50.0
+    assert any("too thin" in reason for reason in factor.reasons)
+
+
+def test_whales_heavy_withdrawals_score_above_neutral():
+    snapshot = WhaleSnapshot(event_count=4, to_exchange_usd=200_000.0, from_exchange_usd=1_800_000.0)
+    factor = score_whales(snapshot)
+
+    assert factor.score > 50.0
+    assert factor.direction in ("LONG", "WAIT")
+    assert any("accumulation" in reason for reason in factor.reasons)
+
+
+def test_whales_heavy_deposits_score_below_neutral():
+    snapshot = WhaleSnapshot(event_count=4, to_exchange_usd=1_800_000.0, from_exchange_usd=200_000.0)
+    factor = score_whales(snapshot)
+
+    assert factor.score < 50.0
+    assert factor.direction in ("SHORT", "WAIT")
+    assert any("distribution" in reason for reason in factor.reasons)
+
+
+def test_whales_deterministic_same_input_same_output():
+    snapshot = WhaleSnapshot(event_count=3, to_exchange_usd=600_000.0, from_exchange_usd=400_000.0)
+    first = score_whales(snapshot)
+    second = score_whales(snapshot)
 
     assert first.score == second.score
     assert first.reasons == second.reasons
