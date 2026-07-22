@@ -1,6 +1,8 @@
 import { apiFetch } from "@/lib/api-client";
 import type {
+  AssetAnalysis,
   AssetDerivatives,
+  AssetHistory,
   AssetOverview,
   AssetSentiment,
   AssetSummary,
@@ -69,6 +71,22 @@ export async function fetchAssetMacro(symbol: string): Promise<MacroInfluenceRea
 export async function fetchAssetSentiment(symbol: string, interval = "1h"): Promise<AssetSentiment | null> {
   try {
     return await apiFetch<AssetSentiment>(`/api/assets/${symbol}/sentiment?interval=${interval}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchAssetAnalysis(symbol: string, interval = "1h"): Promise<AssetAnalysis | null> {
+  try {
+    return await apiFetch<AssetAnalysis>(`/api/assets/${symbol}/analysis?interval=${interval}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchAssetHistory(symbol: string, interval = "1h"): Promise<AssetHistory | null> {
+  try {
+    return await apiFetch<AssetHistory>(`/api/assets/${symbol}/history?interval=${interval}`);
   } catch {
     return null;
   }

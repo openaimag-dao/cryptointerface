@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 
 import {
+  fetchAssetAnalysis,
   fetchAssetDerivatives,
+  fetchAssetHistory,
   fetchAssetMacro,
   fetchAssetNews,
   fetchAssetOverview,
@@ -80,5 +82,23 @@ export function useAssetSentiment(symbol: string, interval = "1h") {
     queryFn: () => fetchAssetSentiment(symbol, interval),
     enabled: Boolean(symbol),
     refetchInterval: 30_000,
+  });
+}
+
+export function useAssetAnalysis(symbol: string, interval = "1h") {
+  return useQuery({
+    queryKey: ["asset-analysis", symbol, interval],
+    queryFn: () => fetchAssetAnalysis(symbol, interval),
+    enabled: Boolean(symbol),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useAssetHistory(symbol: string, interval = "1h") {
+  return useQuery({
+    queryKey: ["asset-history", symbol, interval],
+    queryFn: () => fetchAssetHistory(symbol, interval),
+    enabled: Boolean(symbol),
+    refetchInterval: 60_000,
   });
 }

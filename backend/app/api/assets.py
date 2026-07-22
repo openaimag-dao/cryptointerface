@@ -16,17 +16,23 @@ from app.api.news import _to_news_item
 from app.api.whales import _to_whale_transaction
 from app.database.session import get_db
 from app.schemas.asset import (
+    AssetAnalysisOut,
     AssetDerivativesOut,
+    AssetHistoryOut,
     AssetOverviewOut,
     AssetSentimentOut,
     AssetSummaryOut,
     AssetTechnicalOut,
     AssetWhalesOut,
     FundingHistoryPointOut,
+    HistoryPointOut,
     IndicatorReadingOut,
     LiquidationClusterOut,
     MacroInfluenceReadingOut,
+    RiskAnalysisOut,
+    ScenarioOut,
     SentimentRadarOut,
+    SignalOutcomeOut,
     SmartMoneyConceptOut,
 )
 from app.schemas.news import NewsItem
@@ -233,4 +239,83 @@ async def get_asset_sentiment(
             macro=round(sentiment.radar.macro, 1),
             market_score=round(sentiment.radar.market_score, 1),
         ),
+    )
+
+
+@router.get("/{symbol}/analysis", response_model=AssetAnalysisOut)
+async def get_asset_analysis(
+    symbol: str,
+    interval: str = Query("1h", description="One of: " + ", ".join(TIMEFRAME_SECONDS)),
+    db: AsyncSession = Depends(get_db),
+) -> AssetAnalysisOut:
+    _validate_interval(interval)
+    base_asset = _base_asset(symbol)
+    analysis = await asset_service.get_analysis_snapshot(db, base_asset, interval)
+    if analysis is None:
+        raise HTTPException(status_code=404, detail=f"No candle history yet for {base_asset} {interval}")
+
+    return AssetAnalysisOut(
+        symbol=analysis.symbol,
+        interval=analysis.interval,
+        direction=analysis.direction,
+        confidence=round(analysis.confidence, 1),
+        market_score=round(analysis.market_score, 1),
+        entry=analysis.entry,
+        stop=analysis.stop,
+        tp1=analysis.tp1,
+        tp2=analysis.tp2,
+        tp3=analysis.tp3,
+        risk_reward=round(analysis.risk_reward, 2) if analysis.risk_reward is not None else None,
+        reasons=analysis.reasons,
+        scenarios=[
+            ScenarioOut(label=s.label, probability=s.probability, conditions=s.conditions, targets=s.targets)
+            for s in analysis.scenarios
+        ],
+        risk=RiskAnalysisOut(
+            nearest_support=analysis.risk.nearest_support,
+            nearest_resistance=analysis.risk.nearest_resistance,
+            atr=analysis.risk.atr,
+            atr_risk_pct=analysis.risk.atr_risk_pct,
+            volatility_score=analysis.risk.volatility_score,
+            risk_level=analysis.risk.risk_level,
+            max_recommended_leverage=analysis.risk.max_recommended_leverage,
+            drawdown_risk_pct=analysis.risk.drawdown_risk_pct,
+        ),
+    )
+
+
+@router.get("/{symbol}/history", response_model=AssetHistoryOut)
+async def get_asset_history(
+    symbol: str,
+    interval: str = Query("1h", description="One of: " + ", ".join(TIMEFRAME_SECONDS)),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+) -> AssetHistoryOut:
+    _validate_interval(interval)
+    base_asset = _base_asset(symbol)
+    history = await asset_service.get_history_snapshot(db, base_asset, interval, limit=limit)
+    trading_pair = asset_service.to_trading_pair(base_asset)
+
+    return AssetHistoryOut(
+        symbol=trading_pair,
+        interval=interval,
+        signals=[
+            SignalOutcomeOut(
+                time=s.analysis.time,
+                direction=s.analysis.direction,
+                score=round(s.analysis.score, 1),
+                confidence=round(s.analysis.confidence, 1),
+                entry=s.analysis.entry,
+                stop=s.analysis.stop,
+                tp1=s.analysis.tp1,
+                outcome=s.outcome,
+                pnl_percent=round(s.pnl_percent, 2) if s.pnl_percent is not None else None,
+            )
+            for s in history.signals
+        ],
+        win_rate=history.win_rate,
+        avg_win_pnl_percent=history.avg_win_pnl_percent,
+        avg_loss_pnl_percent=history.avg_loss_pnl_percent,
+        score_history=[HistoryPointOut(time=t, value=round(v, 1)) for t, v in history.score_history],
+        confidence_history=[HistoryPointOut(time=t, value=round(v, 1)) for t, v in history.confidence_history],
     )

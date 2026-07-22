@@ -138,3 +138,70 @@ export interface AssetSentiment {
   reasons: string[];
   radar: SentimentRadar;
 }
+
+export type ScenarioLabel = "BULLISH" | "NEUTRAL" | "BEARISH";
+export type RiskLevel = "LOW" | "MODERATE" | "HIGH" | "EXTREME";
+export type SignalOutcomeStatus = "WIN" | "LOSS" | "OPEN" | "NO_TRADE";
+
+export interface Scenario {
+  label: ScenarioLabel;
+  probability: number;
+  conditions: string[];
+  targets: number[];
+}
+
+export interface RiskAnalysis {
+  nearestSupport: number | null;
+  nearestResistance: number | null;
+  atr: number | null;
+  atrRiskPct: number | null;
+  volatilityScore: number;
+  riskLevel: RiskLevel;
+  maxRecommendedLeverage: number;
+  drawdownRiskPct: number | null;
+}
+
+export interface AssetAnalysis {
+  symbol: string;
+  interval: string;
+  direction: Direction;
+  confidence: number;
+  marketScore: number;
+  entry: number | null;
+  stop: number | null;
+  tp1: number | null;
+  tp2: number | null;
+  tp3: number | null;
+  riskReward: number | null;
+  reasons: string[];
+  scenarios: Scenario[];
+  risk: RiskAnalysis;
+}
+
+export interface SignalOutcome {
+  time: number;
+  direction: Direction;
+  score: number;
+  confidence: number;
+  entry: number | null;
+  stop: number | null;
+  tp1: number | null;
+  outcome: SignalOutcomeStatus;
+  pnlPercent: number | null;
+}
+
+export interface HistoryPoint {
+  time: number;
+  value: number;
+}
+
+export interface AssetHistory {
+  symbol: string;
+  interval: string;
+  signals: SignalOutcome[];
+  winRate: number | null;
+  avgWinPnlPercent: number | null;
+  avgLossPnlPercent: number | null;
+  scoreHistory: HistoryPoint[];
+  confidenceHistory: HistoryPoint[];
+}

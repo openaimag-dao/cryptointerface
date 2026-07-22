@@ -16,6 +16,15 @@ const OverviewTab = dynamic(() => import("@/components/assets/overview-tab").the
 const TechnicalTab = dynamic(() => import("@/components/assets/technical-tab").then((m) => m.TechnicalTab), {
   loading: () => <Skeleton className="h-[420px] w-full rounded-lg" />,
 });
+const SentimentTab = dynamic(() => import("@/components/assets/sentiment-tab").then((m) => m.SentimentTab), {
+  loading: () => <Skeleton className="h-[420px] w-full rounded-lg" />,
+});
+const AiAnalysisTab = dynamic(() => import("@/components/assets/ai-analysis-tab").then((m) => m.AiAnalysisTab), {
+  loading: () => <Skeleton className="h-[420px] w-full rounded-lg" />,
+});
+const HistoryTab = dynamic(() => import("@/components/assets/history-tab").then((m) => m.HistoryTab), {
+  loading: () => <Skeleton className="h-[420px] w-full rounded-lg" />,
+});
 
 const TAB_ITEMS = [
   { value: "overview", label: "Overview" },
@@ -72,13 +81,13 @@ export default function AssetDetailPage() {
           <TabPlaceholder label="Macro" />
         </TabsContent>
         <TabsContent value="sentiment">
-          <TabPlaceholder label="Sentiment" />
+          <SentimentTab baseAsset={baseAsset} />
         </TabsContent>
         <TabsContent value="ai-analysis">
-          <TabPlaceholder label="AI Analysis" />
+          <AiAnalysisTab baseAsset={baseAsset} />
         </TabsContent>
         <TabsContent value="history">
-          <TabPlaceholder label="Historical Behavior" />
+          <HistoryTab baseAsset={baseAsset} />
         </TabsContent>
       </Tabs>
     </div>

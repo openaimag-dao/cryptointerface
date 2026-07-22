@@ -21,6 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai_engine.decision_engine import AIDecision, analyze_market
 from app.ai_engine.indicator_explain import IndicatorReading, explain_indicators
 from app.ai_engine.market_context import build_market_context
+from app.ai_engine.risk_analysis import RiskAnalysis, analyze_risk
+from app.ai_engine.scenario_analysis import Scenario, analyze_scenarios
 from app.ai_engine.scoring.whales import score_whales
 from app.ai_engine.smart_money import SmartMoneyConcept, analyze_smart_money
 from app.intelligence.macro.symbols import MACRO_INDICATORS
@@ -30,6 +32,7 @@ from app.models.whale import WhaleEvent
 from app.schemas.indicator import IndicatorSnapshot
 from app.services.coingecko.client import CoinGeckoRestClient, MarketSnapshot
 from app.services.coingecko.symbols import coingecko_id_for_symbol
+from app.services.history_service import HISTORY_LIMIT, HistorySummary, get_history_summary
 from app.services.indicators.engine import compute_indicators
 from app.services.macro_repository import get_latest_points
 from app.services.market_repository import (
@@ -445,3 +448,67 @@ async def get_sentiment_snapshot(db: AsyncSession, base_asset: str, interval: st
         market_score=result.overall_score,
     )
     return AssetSentiment(result=result, radar=radar)
+
+
+# ---------------------------------------------------------------------------
+# AI Analysis tab
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AssetAnalysis:
+    symbol: str
+    interval: str
+    direction: str
+    confidence: float
+    market_score: float
+    entry: float | None
+    stop: float | None
+    tp1: float | None
+    tp2: float | None
+    tp3: float | None
+    risk_reward: float | None
+    reasons: list[str]
+    scenarios: list[Scenario]
+    risk: RiskAnalysis
+
+
+async def get_analysis_snapshot(db: AsyncSession, base_asset: str, interval: str = "1h") -> AssetAnalysis | None:
+    symbol = to_trading_pair(base_asset)
+    ctx = await build_market_context(db, symbol, interval)
+    if ctx is None:
+        return None
+
+    decision = analyze_market(ctx)
+    scenarios = analyze_scenarios(ctx, decision)
+    risk = analyze_risk(ctx, decision)
+    plan = decision.risk
+
+    return AssetAnalysis(
+        symbol=symbol,
+        interval=interval,
+        direction=decision.direction,
+        confidence=decision.confidence,
+        market_score=decision.market_score,
+        entry=plan.entry if plan else None,
+        stop=plan.stop if plan else None,
+        tp1=plan.tp1 if plan else None,
+        tp2=plan.tp2 if plan else None,
+        tp3=plan.tp3 if plan else None,
+        risk_reward=plan.risk_reward_tp2 if plan else None,
+        reasons=decision.reasons,
+        scenarios=scenarios,
+        risk=risk,
+    )
+
+
+# ---------------------------------------------------------------------------
+# History tab
+# ---------------------------------------------------------------------------
+
+
+async def get_history_snapshot(
+    db: AsyncSession, base_asset: str, interval: str = "1h", limit: int = HISTORY_LIMIT
+) -> HistorySummary:
+    symbol = to_trading_pair(base_asset)
+    return await get_history_summary(db, symbol, interval, limit=limit)

@@ -141,3 +141,71 @@ class AssetSentimentOut(CamelModel):
     breakdown: dict[str, SentimentCategory]
     reasons: list[str]
     radar: SentimentRadarOut
+
+
+ScenarioLabel = Literal["BULLISH", "NEUTRAL", "BEARISH"]
+RiskLevel = Literal["LOW", "MODERATE", "HIGH", "EXTREME"]
+SignalOutcome = Literal["WIN", "LOSS", "OPEN", "NO_TRADE"]
+
+
+class ScenarioOut(CamelModel):
+    label: ScenarioLabel
+    probability: float
+    conditions: list[str]
+    targets: list[float]
+
+
+class RiskAnalysisOut(CamelModel):
+    nearest_support: float | None
+    nearest_resistance: float | None
+    atr: float | None
+    atr_risk_pct: float | None
+    volatility_score: float
+    risk_level: RiskLevel
+    max_recommended_leverage: float
+    drawdown_risk_pct: float | None
+
+
+class AssetAnalysisOut(CamelModel):
+    symbol: str
+    interval: str
+    direction: Direction
+    confidence: float
+    market_score: float
+    entry: float | None
+    stop: float | None
+    tp1: float | None
+    tp2: float | None
+    tp3: float | None
+    risk_reward: float | None
+    reasons: list[str]
+    scenarios: list[ScenarioOut]
+    risk: RiskAnalysisOut
+
+
+class SignalOutcomeOut(CamelModel):
+    time: int
+    direction: Direction
+    score: float
+    confidence: float
+    entry: float | None
+    stop: float | None
+    tp1: float | None
+    outcome: SignalOutcome
+    pnl_percent: float | None
+
+
+class HistoryPointOut(CamelModel):
+    time: int
+    value: float
+
+
+class AssetHistoryOut(CamelModel):
+    symbol: str
+    interval: str
+    signals: list[SignalOutcomeOut]
+    win_rate: float | None
+    avg_win_pnl_percent: float | None
+    avg_loss_pnl_percent: float | None
+    score_history: list[HistoryPointOut]
+    confidence_history: list[HistoryPointOut]
