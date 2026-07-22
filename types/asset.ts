@@ -58,6 +58,8 @@ export interface AssetOverview {
   macd: IndicatorReading;
   emaAlignment: IndicatorReading;
   vwap: IndicatorReading;
+  volumeTrend: IndicatorReading;
+  liquidityScore: IndicatorReading;
 }
 
 export interface SmartMoneyConcept {
@@ -89,6 +91,16 @@ export interface LiquidationCluster {
   eventCount: number;
 }
 
+export type ExchangeDataStatus = "AVAILABLE" | "NOT_YET_IMPLEMENTED";
+
+export interface ExchangeBreakdown {
+  exchange: string;
+  status: ExchangeDataStatus;
+  openInterest: number | null;
+  fundingRate: number | null;
+  note: string;
+}
+
 export interface AssetDerivatives {
   symbol: string;
   fundingRate: number | null;
@@ -98,6 +110,7 @@ export interface AssetDerivatives {
   openInterestValue: number | null;
   oiDeltaPercent: number | null;
   liquidationClusters: LiquidationCluster[];
+  exchangeBreakdown: ExchangeBreakdown[];
 }
 
 export interface AssetWhales {
@@ -210,4 +223,24 @@ export interface CorrelationReading {
   reference: string;
   coefficient: number | null;
   dataPoints: number;
+}
+
+export type TimelineDataStatus = "OK" | "AWAITING_DATA";
+
+export interface TimelineEntry {
+  time: number;
+  score: number;
+  confidence: number;
+  direction: Direction;
+  changeSummary: string | null;
+  reasons: string[] | null;
+  strengthenedFactors: string[];
+  weakenedFactors: string[];
+  dataStatus: TimelineDataStatus;
+}
+
+export interface AssetTimeline {
+  symbol: string;
+  interval: string;
+  entries: TimelineEntry[];
 }

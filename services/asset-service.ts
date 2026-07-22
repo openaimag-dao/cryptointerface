@@ -7,6 +7,7 @@ import type {
   AssetSentiment,
   AssetSummary,
   AssetTechnical,
+  AssetTimeline,
   AssetWhales,
   CorrelationReading,
   MacroInfluenceReading,
@@ -98,5 +99,13 @@ export async function fetchAssetCorrelation(symbol: string, interval = "1h"): Pr
     return await apiFetch<CorrelationReading[]>(`/api/assets/${symbol}/correlation?interval=${interval}`);
   } catch {
     return [];
+  }
+}
+
+export async function fetchAssetTimeline(symbol: string, interval = "1h"): Promise<AssetTimeline | null> {
+  try {
+    return await apiFetch<AssetTimeline>(`/api/assets/${symbol}/timeline?interval=${interval}`);
+  } catch {
+    return null;
   }
 }

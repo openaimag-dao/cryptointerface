@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { CHART_TIMEFRAMES, type ChartTimeframe } from "@/lib/constants";
+import { CHART_TIMEFRAMES, TIMEFRAME_LABELS, type ChartTimeframe } from "@/lib/constants";
 import { useCandles } from "@/hooks/use-market-data";
 import { useAssetOverview } from "@/hooks/use-asset";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,7 +52,7 @@ export function OverviewTab({ symbol, baseAsset }: OverviewTabProps) {
             <TabsList>
               {CHART_TIMEFRAMES.map((tf) => (
                 <TabsTrigger key={tf} value={tf}>
-                  {tf.toUpperCase()}
+                  {TIMEFRAME_LABELS[tf]}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -72,12 +72,16 @@ export function OverviewTab({ symbol, baseAsset }: OverviewTabProps) {
           <CardTitle>Market Snapshot</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          {overviewLoading || !overview ? (
+          {overviewLoading ? (
             <div className="space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => (
+              {Array.from({ length: 7 }).map((_, i) => (
                 <Skeleton key={i} className="h-10 w-full" />
               ))}
             </div>
+          ) : !overview ? (
+            <p className="py-10 text-center text-xs text-muted-foreground">
+              Not enough candle history yet for this timeframe.
+            </p>
           ) : (
             <div>
               <div className="flex items-center justify-between border-b border-border-subtle py-2.5">
@@ -93,6 +97,8 @@ export function OverviewTab({ symbol, baseAsset }: OverviewTabProps) {
               <SnapshotRow reading={overview.macd} />
               <SnapshotRow reading={overview.emaAlignment} />
               <SnapshotRow reading={overview.vwap} />
+              <SnapshotRow reading={overview.volumeTrend} />
+              <SnapshotRow reading={overview.liquidityScore} />
             </div>
           )}
         </CardContent>

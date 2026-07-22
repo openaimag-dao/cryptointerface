@@ -11,6 +11,7 @@ import {
   fetchAssetSentiment,
   fetchAssetSummary,
   fetchAssetTechnical,
+  fetchAssetTimeline,
   fetchAssetWhales,
 } from "@/services/asset-service";
 
@@ -110,5 +111,14 @@ export function useAssetCorrelation(symbol: string, interval = "1h") {
     queryFn: () => fetchAssetCorrelation(symbol, interval),
     enabled: Boolean(symbol),
     refetchInterval: 60_000,
+  });
+}
+
+export function useAssetTimeline(symbol: string, interval = "1h") {
+  return useQuery({
+    queryKey: ["asset-timeline", symbol, interval],
+    queryFn: () => fetchAssetTimeline(symbol, interval),
+    enabled: Boolean(symbol),
+    refetchInterval: 30_000,
   });
 }

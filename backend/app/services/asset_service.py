@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_engine.decision_engine import AIDecision, analyze_market
-from app.ai_engine.indicator_explain import IndicatorReading, explain_indicators
+from app.ai_engine.indicator_explain import IndicatorReading, explain_indicators, liquidity_score_reading
 from app.ai_engine.market_context import build_market_context
 from app.ai_engine.risk_analysis import RiskAnalysis, analyze_risk
 from app.ai_engine.scenario_analysis import Scenario, analyze_scenarios
@@ -34,6 +34,7 @@ from app.services.coingecko.client import CoinGeckoRestClient, MarketSnapshot
 from app.services.coingecko.symbols import coingecko_id_for_symbol
 from app.services.correlation_service import CorrelationReading, compute_correlations
 from app.services.history_service import HISTORY_LIMIT, HistorySummary, get_history_summary
+from app.services.timeline_service import TIMELINE_LIMIT, TimelineSummary, get_timeline
 from app.services.indicators.engine import compute_indicators
 from app.services.macro_repository import get_latest_points
 from app.services.market_repository import (
@@ -142,6 +143,8 @@ class AssetOverview:
     macd: IndicatorReading
     ema_alignment: IndicatorReading
     vwap: IndicatorReading
+    volume_trend: IndicatorReading
+    liquidity_score: IndicatorReading
 
 
 _OVERVIEW_INDICATOR_NAMES = {"ATR (14)", "RSI (14)", "MACD", "EMA Alignment", "VWAP"}
@@ -164,6 +167,15 @@ async def get_overview_snapshot(db: AsyncSession, base_asset: str, interval: str
     trend_factor = decision.factors.get("trend")
     volatility_factor = decision.factors.get("volatility")
 
+    # "Volume Trend" relabels the Technical tab's OBV read rather than
+    # recomputing it, so the two panels never disagree.
+    obv_reading = by_name.get("OBV")
+    volume_trend = (
+        IndicatorReading("Volume Trend", obv_reading.value, obv_reading.status, obv_reading.explanation)
+        if obv_reading
+        else IndicatorReading("Volume Trend", "—", "NEUTRAL", "Not enough history yet.")
+    )
+
     return AssetOverview(
         trend_status=trend_factor.direction if trend_factor else "WAIT",
         volatility_status=volatility_factor.direction if volatility_factor else "WAIT",
@@ -173,6 +185,8 @@ async def get_overview_snapshot(db: AsyncSession, base_asset: str, interval: str
         ema_alignment=by_name.get("EMA Alignment")
         or IndicatorReading("EMA Alignment", "—", "NEUTRAL", "Not enough history yet."),
         vwap=by_name.get("VWAP") or IndicatorReading("VWAP", "—", "NEUTRAL", "Not enough history yet."),
+        volume_trend=volume_trend,
+        liquidity_score=liquidity_score_reading(ctx.closes, ctx.volumes),
     )
 
 
@@ -200,7 +214,7 @@ async def get_technical_snapshot(db: AsyncSession, base_asset: str, interval: st
 
     snapshot: IndicatorSnapshot = compute_indicators(symbol, interval, ctx.candles)
     indicators = explain_indicators(snapshot, ctx.closes, ctx.volumes)
-    smart_money = analyze_smart_money(ctx.closes, ctx.highs, ctx.lows)
+    smart_money = analyze_smart_money(ctx.closes, ctx.highs, ctx.lows, ctx.opens, ctx.volumes)
 
     decision = analyze_market(ctx)
     structure = decision.factors.get("structure")
@@ -239,6 +253,15 @@ class LiquidationCluster:
 
 
 @dataclass(frozen=True)
+class ExchangeBreakdown:
+    exchange: str
+    status: str  # "AVAILABLE" | "NOT_YET_IMPLEMENTED"
+    open_interest: float | None
+    funding_rate: float | None
+    note: str
+
+
+@dataclass(frozen=True)
 class AssetDerivatives:
     symbol: str
     funding_rate: float | None
@@ -248,11 +271,43 @@ class AssetDerivatives:
     open_interest_value: float | None
     oi_delta_percent: float | None
     liquidation_clusters: list[LiquidationCluster]
+    exchange_breakdown: list[ExchangeBreakdown]
 
 
 LIQUIDATION_CLUSTER_COUNT = 6
 FUNDING_HISTORY_LIMIT = 20
 OI_HISTORY_LIMIT = 20
+
+# Architecture-only per the Sprint 6 spec: this app has exactly one real
+# derivatives data source (Binance USDT-M Futures — see
+# app/services/binance/rest_client.py's docstring for why it stays the
+# only one). Adding another exchange means a new REST/WS client, not a
+# UI change, so these report NOT_YET_IMPLEMENTED honestly rather than
+# faking a number no client here has ever fetched.
+_UNINTEGRATED_EXCHANGES = ("Bybit", "OKX", "Bitget")
+
+
+def _exchange_breakdown(open_interest: float | None, funding_rate: float | None) -> list[ExchangeBreakdown]:
+    entries = [
+        ExchangeBreakdown(
+            exchange="Binance",
+            status="AVAILABLE",
+            open_interest=open_interest,
+            funding_rate=funding_rate,
+            note="Live USDT-M Futures data.",
+        )
+    ]
+    entries.extend(
+        ExchangeBreakdown(
+            exchange=name,
+            status="NOT_YET_IMPLEMENTED",
+            open_interest=None,
+            funding_rate=None,
+            note="No client integrated for this exchange yet.",
+        )
+        for name in _UNINTEGRATED_EXCHANGES
+    )
+    return entries
 
 
 def _bucket_liquidations(events: list, cluster_count: int = LIQUIDATION_CLUSTER_COUNT) -> list[LiquidationCluster]:
@@ -309,6 +364,9 @@ async def get_derivatives_snapshot(db: AsyncSession, base_asset: str) -> AssetDe
         open_interest_value=open_interest.open_interest_value if open_interest else None,
         oi_delta_percent=oi_delta_percent,
         liquidation_clusters=_bucket_liquidations(liquidations),
+        exchange_breakdown=_exchange_breakdown(
+            open_interest.open_interest if open_interest else None, funding.funding_rate if funding else None
+        ),
     )
 
 
@@ -523,3 +581,15 @@ async def get_history_snapshot(
 async def get_correlation_snapshot(db: AsyncSession, base_asset: str, interval: str = "1h") -> list[CorrelationReading]:
     symbol = to_trading_pair(base_asset)
     return await compute_correlations(db, symbol, interval)
+
+
+# ---------------------------------------------------------------------------
+# Confidence Timeline / Explain Decision
+# ---------------------------------------------------------------------------
+
+
+async def get_timeline_snapshot(
+    db: AsyncSession, base_asset: str, interval: str = "1h", limit: int = TIMELINE_LIMIT
+) -> TimelineSummary:
+    symbol = to_trading_pair(base_asset)
+    return await get_timeline(db, symbol, interval, limit=limit)

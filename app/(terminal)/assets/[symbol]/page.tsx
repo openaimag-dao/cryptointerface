@@ -36,6 +36,10 @@ const AiAnalysisTab = dynamic(() => import("@/components/assets/ai-analysis-tab"
 const HistoryTab = dynamic(() => import("@/components/assets/history-tab").then((m) => m.HistoryTab), {
   loading: () => <Skeleton className="h-[420px] w-full rounded-lg" />,
 });
+const ConfidenceTimelineTab = dynamic(
+  () => import("@/components/assets/confidence-timeline-tab").then((m) => m.ConfidenceTimelineTab),
+  { loading: () => <Skeleton className="h-[420px] w-full rounded-lg" /> },
+);
 
 const TAB_ITEMS = [
   { value: "overview", label: "Overview" },
@@ -47,6 +51,7 @@ const TAB_ITEMS = [
   { value: "sentiment", label: "Sentiment" },
   { value: "ai-analysis", label: "AI Analysis" },
   { value: "history", label: "History" },
+  { value: "timeline", label: "Confidence Timeline" },
 ] as const;
 
 export default function AssetDetailPage() {
@@ -99,6 +104,9 @@ export default function AssetDetailPage() {
         </TabsContent>
         <TabsContent value="history">
           <HistoryTab baseAsset={baseAsset} />
+        </TabsContent>
+        <TabsContent value="timeline">
+          <ConfidenceTimelineTab baseAsset={baseAsset} />
         </TabsContent>
       </Tabs>
     </div>

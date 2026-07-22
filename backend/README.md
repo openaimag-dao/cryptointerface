@@ -776,7 +776,7 @@ column that stores whatever `IndicatorSnapshot` serializes to, so a new
 indicator field just starts appearing in both `/api/indicators/{symbol}`
 and the `"indicators"` WebSocket channel the next time a candle closes.
 
-## Asset Intelligence Dashboard (Sprint 8)
+## Asset Intelligence Dashboard 2.0 (Sprint 8 + Sprint 6)
 
 A per-symbol research terminal at the frontend route `/assets/{symbol}`
 (e.g. `/assets/BTC`) — everything a trader would want to know about one
@@ -809,17 +809,25 @@ wrap:
   from `IndicatorSnapshot` into a `(value, status, explanation)` triple for
   the Technical tab (e.g. `RSI 78.0 → OVERBOUGHT → "RSI at 78.0, above 70
   — momentum may be stretched."`). Pure, no I/O.
-- **`app/ai_engine/smart_money.py`** — Break of Structure, Equal Highs, and
-  Equal Lows are computed for real from the same swing-point detector
-  `scoring/structure.py` already uses. The other five ICT/SMC concepts
-  (Change of Character, Order Blocks, Fair Value Gaps, Liquidity Zones,
-  Liquidity Sweep) have no detector anywhere in this codebase yet and are
-  reported as `NOT_YET_IMPLEMENTED` with a one-line description of what a
-  real detector would need — never a fabricated read. Each concept is one
+- **`app/ai_engine/smart_money.py`** — all eight ICT/SMC concepts are real
+  as of Sprint 6. Break of Structure, Equal Highs, and Equal Lows (Sprint
+  8) come from the same swing-point detector `scoring/structure.py`
+  already uses. Sprint 6 implemented the remaining five with standard,
+  deterministic definitions computed off real OHLCV — no ML, no fabricated
+  levels: **Change of Character** (a Break of Structure that runs against
+  the trend read off the last two swing highs/lows — the first sign of a
+  reversal, vs. a BOS that continues it), **Order Blocks** (the last
+  opposite-colored candle before the most recent impulse candle, body >
+  1.5x the recent average), **Fair Value Gaps** (the classic 3-candle
+  imbalance, reported only while unfilled by a later candle), **Liquidity
+  Zones** (a volume-profile read — the highest-volume price band over the
+  recent window, relative to current price), and **Liquidity Sweep** (a
+  wick beyond the most recent swing high/low that closes back inside it —
+  the standard stop-hunt-then-reverse signature). Each concept is one
   function in the `_CONCEPT_BUILDERS` list with the same
-  `(closes, highs, lows) -> SmartMoneyConcept` signature; adding a real
-  detector later is a one-function swap, see "Adding a new analytical
-  module" below.
+  `(opens, highs, lows, closes, volumes) -> SmartMoneyConcept` signature —
+  a future ninth concept is one more function, see "Adding a new
+  analytical module" below.
 - **`app/ai_engine/scenario_analysis.py`** — the AI Analysis tab's three
   Bullish/Neutral/Bearish scenarios. Probabilities are a deterministic
   function of the Decision Engine's own `market_score` and `confidence`
@@ -848,6 +856,18 @@ wrap:
   (`OUTCOME_HORIZON_BARS`), using the same conservative "stop wins on a
   same-bar conflict" rule `app/backtesting/trade_simulator.py` uses. This
   is a per-signal outcome check, not a continuous strategy backtest.
+- **`app/services/timeline_service.py`** (Sprint 6) — the Confidence
+  Timeline. Since Sprint 6, `ai_analysis` also persists the per-factor
+  scores (`factors`) and reasons (`reasons`) the Decision Engine computed
+  for that call (see `app/models/ai_analysis.py` and
+  `app/services/ai_repository.py`) — nothing here re-derives or re-scores
+  anything; it diffs adjacent persisted rows into real change points:
+  score/confidence/direction deltas above a threshold, plus which named
+  factors (Trend, Open Interest, News, ...) actually strengthened or
+  weakened between them, read straight from the persisted factor scores.
+  Rows written before this migration have `factors`/`reasons = null`; the
+  timeline reports `AWAITING_DATA` for those honestly instead of
+  backfilling a guess.
 
 ### API endpoints
 
@@ -868,19 +888,66 @@ candle history yet (same convention as `/api/ai/*`):
 | `GET /api/assets/{symbol}/analysis` | AI Analysis | direction/confidence/market score/entry-stop-TP1-3/risk-reward/reasons/scenarios/risk |
 | `GET /api/assets/{symbol}/history` | History | win rate, avg win/loss, per-signal outcomes, score/confidence history |
 | `GET /api/assets/{symbol}/correlation` | History (embedded) | Pearson coefficient vs BTC/ETH/NASDAQ/SP500/GOLD/DXY |
+| `GET /api/assets/{symbol}/timeline` | Confidence Timeline | real decision change-points (score/confidence/direction deltas, strengthened/weakened factors, reasons) — also backs the "Explain Decision" modal off the same response |
 
-`overview`/`technical`/`analysis`/`sentiment` accept `?interval=` (default
-`1h`, one of `TIMEFRAME_SECONDS`); `whales`/`news`/`history` accept
-`?limit=`.
+`overview`/`technical`/`analysis`/`sentiment`/`timeline` accept
+`?interval=` (default `1h`, one of `TIMEFRAME_SECONDS` — now including
+`1w`/`1M`, see "Known limitations"); `whales`/`news`/`history`/`timeline`
+accept `?limit=`.
+
+`timeline` is deliberately the only endpoint backing both the Confidence
+Timeline widget and the Explain Decision modal — the Sprint 6 spec named
+a separate `/decision-history` route, but the modal needs nothing the
+timeline response doesn't already have, and a second endpoint for the
+same data would mean a second request for data already sitting in the
+frontend's React Query cache. If a genuinely different data shape shows
+up later (e.g. a deeper per-decision audit trail), split it out then.
 
 ### Frontend
 
 `app/(terminal)/assets/[symbol]/page.tsx` is a client component that reads
 `symbol` from the route, normalizes it to upper case, and renders the top
-bar (`components/assets/asset-top-bar.tsx`) plus a 9-tab `Tabs` layout. Each
-tab component is its own file under `components/assets/` and is loaded via
-`next/dynamic` (code-split, with a `Skeleton` fallback) — a coin's page
-never ships JS for a tab the user hasn't opened.
+bar (`components/assets/asset-top-bar.tsx`) plus a 10-tab `Tabs` layout
+(Sprint 6 added "Confidence Timeline"). Each tab component is its own file
+under `components/assets/` and is loaded via `next/dynamic` (code-split,
+with a `Skeleton` fallback) — a coin's page never ships JS for a tab the
+user hasn't opened.
+
+**Sprint 6 additions to existing tabs**, each reusing data already on the
+wire rather than a new fetch:
+
+- **Overview → Market Snapshot**: added "Volume Trend" (relabels the
+  Technical tab's OBV read — zero recomputation, so the two panels can
+  never disagree) and "Liquidity Score" (a new dollar-volume proxy —
+  average traded value over the recent window; documented as a proxy
+  since this app has no order-book/bid-ask depth data to compute a true
+  depth-based liquidity score from). The Price Chart's timeframe selector
+  also gained `1w`/`1M` (Binance supports both natively, and the
+  Backtesting Engine's `SUPPORTED_TIMEFRAMES` derives from the same
+  `TIMEFRAME_SECONDS` map, so it picked them up for free) — see "Known
+  limitations" for what selecting them shows without a backfilled history.
+- **Derivatives**: added "Exchange Breakdown" (Binance reports `AVAILABLE`
+  with its live OI/funding; Bybit/OKX/Bitget report `NOT_YET_IMPLEMENTED`
+  with an honest note — same pattern Smart Money uses for concepts with no
+  detector yet, since adding a real second exchange means a new REST/WS
+  client, not a UI change) and a "Liquidation Heat Map" — the spec called
+  this a "placeholder," but `liquidation_clusters` (price-bucketed USD
+  volume) was already real data from Sprint 8, just rendered as a bar
+  chart; Sprint 6 just added a genuine color-intensity view of that same
+  data, no new backend field.
+- **New: Confidence Timeline tab** (`components/assets/confidence-timeline-tab.tsx`,
+  `hooks/use-asset.ts`'s `useAssetTimeline`, `services/asset-service.ts`'s
+  `fetchAssetTimeline`) — renders `GET /api/assets/{symbol}/timeline`'s
+  change points as a list, each showing what changed and an "AWAITING
+  DATA" vs "Explained" status badge. Each entry has a "Почему AI изменил
+  мнение?" (**"Why did AI change its mind?"**) button opening a Radix
+  `Dialog` (keyboard nav/focus-trap/`Escape`-to-close come from Radix for
+  free) showing: what changed, the real persisted reasons, and which
+  factors strengthened/weakened — all off the *same* already-fetched
+  timeline entry, no second request. For entries recorded before the
+  Sprint 6 `factors`/`reasons` columns existed, it shows an honest
+  "recorded before per-factor reasons were captured" message instead of
+  fabricating an explanation.
 
 The **watchlist** (`store/watchlist-store.ts`) is a Zustand store persisted
 to `localStorage`, keyed by trading pair, storing `{ pinned, note, addedAt }`
@@ -913,13 +980,25 @@ one is mechanical:
 4. Write unit tests for the pure function(s) against a synthetic
    `MarketContext` (see `tests/test_scenario_analysis.py`) — no database
    needed unless the module reads its own repository, in which case follow
-   `tests/test_asset_service.py`'s `db_session` fixture pattern.
+   `tests/test_asset_service.py`'s `db_session` fixture pattern. Add a
+   router-level case to `tests/test_api_assets.py` (status code + 404
+   branch) following its `httpx.AsyncClient` + `get_db` dependency-override
+   pattern — every existing endpoint gets one, don't just cover the
+   service function.
 5. **Frontend**: add the matching TypeScript interface to `types/asset.ts`,
    a `fetchAsset<Name>()` in `services/asset-service.ts`, a
    `useAsset<Name>()` hook in `hooks/use-asset.ts`, and a tab component
    under `components/assets/`. Wire it into the `TAB_ITEMS` array and a new
    `TabsContent` in `app/(terminal)/assets/[symbol]/page.tsx`, loaded via
    `next/dynamic` like the existing tabs.
+6. **Frontend tests** (`npm test`, Vitest + `@testing-library/react`, see
+   `vitest.config.ts`): a service test mocking `fetch` (see
+   `services/asset-service.test.ts`), a hook test with a
+   `QueryClientProvider` wrapper mocking the service module (see
+   `hooks/use-asset.test.tsx`), and a component test mocking the hook (see
+   `components/assets/confidence-timeline-tab.test.tsx`) — three thin
+   layers, each mocking only the one below it, so a service bug and a
+   rendering bug fail in different tests.
 
 The Smart Money module (`app/ai_engine/smart_money.py`) is the reference
 example for "architecture ready, concept not yet real": each concept is one
@@ -929,8 +1008,21 @@ caller.
 
 ### Known limitations
 
-- **Smart Money**: only Break of Structure/Equal Highs/Equal Lows are real
-  today (see above); the other five ICT concepts are placeholders.
+- **Exchange Breakdown**: only Binance is real (this app's only integrated
+  derivatives data source); Bybit/OKX/Bitget are architecture-only
+  placeholders reporting `NOT_YET_IMPLEMENTED` until a real client exists
+  for one of them.
+- **1w/1M timeframes**: `TIMEFRAME_SECONDS` supports them and the frontend
+  selector offers them, but the Data Engine's default `TIMEFRAMES` env var
+  doesn't include them (see `backend/.env.example`) — an operator has to
+  opt in before the WS/backfill loops actually track them. Until then,
+  selecting `1w`/`1M` shows the same honest "not enough candle history"
+  empty state as any other under-backfilled timeframe, never fabricated
+  data.
+- **Confidence Timeline / Explain Decision**: only decisions persisted
+  *after* the Sprint 6 `factors`/`reasons` columns were added have real
+  per-factor reasons; older rows show `AWAITING_DATA` and the modal
+  explains why rather than guessing.
 - **Correlation**: BTC/ETH references are real now; NASDAQ/S&P 500/Gold/DXY
   need the Macro Engine to accumulate `CORRELATION_MIN_DATA_POINTS` (20)
   matched readings before they stop returning `null`.
@@ -949,7 +1041,7 @@ caller.
   backtested probability distribution. Documented as a heuristic, not a
   forecast guarantee.
 
-### Ready for Sprint 5 (Backtesting) and future Paper Trading
+### Ready for future Paper Trading
 
 - The History tab's outcome resolution already replays TP1/stop against
   real forward candles using the exact same conservative fill rule the
@@ -961,3 +1053,39 @@ caller.
   they're already usable from a background job (e.g. a Paper Trading
   engine wanting a symbol's current AI Analysis) without going through
   the HTTP layer at all.
+
+### Readiness note for the next Sprint — Quant Lab (Backtesting, Walk Forward, Strategy Research)
+
+Everything the next sprint needs already exists in some form — this is a
+UI/orchestration layer on top of it, not a new engine:
+
+- **Backtesting** (`app/backtesting/`, see "Backtesting Engine" above) is
+  already a complete, tested engine (`engine.py`, `strategy_runner.py`,
+  `trade_simulator.py`, `performance.py`, `risk_metrics.py`) driven by the
+  same point-in-time `MarketContext` the live Decision Engine uses — a
+  Quant Lab UI is a new frontend surface over the existing
+  `/api/backtesting/*` endpoints, not new backend computation.
+- **Walk Forward** (`app/backtesting/walk_forward.py`) and the optimizer
+  (`app/backtesting/optimizer.py`) already exist as backend modules with
+  no frontend surface yet — Quant Lab's natural first UI addition.
+- **Strategy Research**: the Decision Engine's `FACTOR_WEIGHTS`
+  (`app/ai_engine/market_score.py`) are fixed constants today, by design
+  (reproducible, auditable). A Strategy Research workbench that lets a
+  user try alternate weights would need a *parallel*,
+  explicitly-labeled-experimental scoring path — never mutate
+  `FACTOR_WEIGHTS` itself, which the live Decision Engine and every
+  persisted `ai_analysis` row depend on staying stable.
+- **Confidence Timeline as a research primitive**: `timeline_service.py`'s
+  change-point diffing (real persisted factor-score deltas, not
+  recomputed) is exactly the kind of "what changed and why" building
+  block a Strategy Research workbench would want per-backtest-trade, not
+  just per-symbol — reusable as-is, no new persistence needed since
+  backtests already write to `backtest_trades`
+  (`app/models/backtest_trade.py`) and `equity_curve`
+  (`app/models/equity_curve.py`).
+- **Smart Money as a strategy input**: now that all eight concepts are
+  real (Sprint 6), `analyze_smart_money()` is a plain function of
+  `(opens, highs, lows, closes, volumes)` — trivially callable from
+  `strategy_runner.py`'s bar-by-bar replay loop if a future strategy wants
+  to condition entries on Order Blocks/FVGs/Liquidity Sweeps, no
+  refactor needed.

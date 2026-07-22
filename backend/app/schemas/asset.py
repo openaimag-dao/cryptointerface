@@ -62,6 +62,8 @@ class AssetOverviewOut(CamelModel):
     macd: IndicatorReadingOut
     ema_alignment: IndicatorReadingOut
     vwap: IndicatorReadingOut
+    volume_trend: IndicatorReadingOut
+    liquidity_score: IndicatorReadingOut
 
 
 class SmartMoneyConceptOut(CamelModel):
@@ -93,6 +95,17 @@ class LiquidationClusterOut(CamelModel):
     event_count: int
 
 
+ExchangeDataStatus = Literal["AVAILABLE", "NOT_YET_IMPLEMENTED"]
+
+
+class ExchangeBreakdownOut(CamelModel):
+    exchange: str
+    status: ExchangeDataStatus
+    open_interest: float | None
+    funding_rate: float | None
+    note: str
+
+
 class AssetDerivativesOut(CamelModel):
     symbol: str
     funding_rate: float | None
@@ -102,6 +115,7 @@ class AssetDerivativesOut(CamelModel):
     open_interest_value: float | None
     oi_delta_percent: float | None
     liquidation_clusters: list[LiquidationClusterOut]
+    exchange_breakdown: list[ExchangeBreakdownOut]
 
 
 class MacroInfluenceReadingOut(CamelModel):
@@ -215,3 +229,24 @@ class CorrelationReadingOut(CamelModel):
     reference: str
     coefficient: float | None
     data_points: int
+
+
+TimelineDataStatus = Literal["OK", "AWAITING_DATA"]
+
+
+class TimelineEntryOut(CamelModel):
+    time: int
+    score: float
+    confidence: float
+    direction: Direction
+    change_summary: str | None
+    reasons: list[str] | None
+    strengthened_factors: list[str]
+    weakened_factors: list[str]
+    data_status: TimelineDataStatus
+
+
+class AssetTimelineOut(CamelModel):
+    symbol: str
+    interval: str
+    entries: list[TimelineEntryOut]
