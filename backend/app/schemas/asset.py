@@ -215,3 +215,24 @@ class CorrelationReadingOut(CamelModel):
     reference: str
     coefficient: float | None
     data_points: int
+
+
+TimelineDataStatus = Literal["OK", "AWAITING_DATA"]
+
+
+class TimelineEntryOut(CamelModel):
+    time: int
+    score: float
+    confidence: float
+    direction: Direction
+    change_summary: str | None
+    reasons: list[str] | None
+    strengthened_factors: list[str]
+    weakened_factors: list[str]
+    data_status: TimelineDataStatus
+
+
+class AssetTimelineOut(CamelModel):
+    symbol: str
+    interval: str
+    entries: list[TimelineEntryOut]

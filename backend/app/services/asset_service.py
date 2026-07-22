@@ -34,6 +34,7 @@ from app.services.coingecko.client import CoinGeckoRestClient, MarketSnapshot
 from app.services.coingecko.symbols import coingecko_id_for_symbol
 from app.services.correlation_service import CorrelationReading, compute_correlations
 from app.services.history_service import HISTORY_LIMIT, HistorySummary, get_history_summary
+from app.services.timeline_service import TIMELINE_LIMIT, TimelineSummary, get_timeline
 from app.services.indicators.engine import compute_indicators
 from app.services.macro_repository import get_latest_points
 from app.services.market_repository import (
@@ -523,3 +524,15 @@ async def get_history_snapshot(
 async def get_correlation_snapshot(db: AsyncSession, base_asset: str, interval: str = "1h") -> list[CorrelationReading]:
     symbol = to_trading_pair(base_asset)
     return await compute_correlations(db, symbol, interval)
+
+
+# ---------------------------------------------------------------------------
+# Confidence Timeline / Explain Decision
+# ---------------------------------------------------------------------------
+
+
+async def get_timeline_snapshot(
+    db: AsyncSession, base_asset: str, interval: str = "1h", limit: int = TIMELINE_LIMIT
+) -> TimelineSummary:
+    symbol = to_trading_pair(base_asset)
+    return await get_timeline(db, symbol, interval, limit=limit)

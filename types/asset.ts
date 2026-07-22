@@ -211,3 +211,23 @@ export interface CorrelationReading {
   coefficient: number | null;
   dataPoints: number;
 }
+
+export type TimelineDataStatus = "OK" | "AWAITING_DATA";
+
+export interface TimelineEntry {
+  time: number;
+  score: number;
+  confidence: number;
+  direction: Direction;
+  changeSummary: string | null;
+  reasons: string[] | null;
+  strengthenedFactors: string[];
+  weakenedFactors: string[];
+  dataStatus: TimelineDataStatus;
+}
+
+export interface AssetTimeline {
+  symbol: string;
+  interval: string;
+  entries: TimelineEntry[];
+}

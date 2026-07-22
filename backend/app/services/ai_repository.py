@@ -22,6 +22,8 @@ async def insert_ai_analysis(db: AsyncSession, decision: AIDecision) -> None:
         tp2=risk.tp2 if risk else None,
         tp3=risk.tp3 if risk else None,
         risk_reward=risk.risk_reward_tp2 if risk else None,
+        factors={name: factor.score for name, factor in decision.factors.items()},
+        reasons=decision.reasons,
     )
     db.add(row)
     await db.commit()

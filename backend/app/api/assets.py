@@ -23,6 +23,7 @@ from app.schemas.asset import (
     AssetSentimentOut,
     AssetSummaryOut,
     AssetTechnicalOut,
+    AssetTimelineOut,
     AssetWhalesOut,
     CorrelationReadingOut,
     FundingHistoryPointOut,
@@ -35,6 +36,7 @@ from app.schemas.asset import (
     SentimentRadarOut,
     SignalOutcomeOut,
     SmartMoneyConceptOut,
+    TimelineEntryOut,
 )
 from app.schemas.news import NewsItem
 from app.schemas.sentiment import SentimentCategory
@@ -335,3 +337,35 @@ async def get_asset_correlation(
         CorrelationReadingOut(reference=r.reference, coefficient=r.coefficient, data_points=r.data_points)
         for r in readings
     ]
+
+
+@router.get("/{symbol}/timeline", response_model=AssetTimelineOut)
+async def get_asset_timeline(
+    symbol: str,
+    interval: str = Query("1h", description="One of: " + ", ".join(TIMEFRAME_SECONDS)),
+    limit: int = Query(30, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> AssetTimelineOut:
+    _validate_interval(interval)
+    base_asset = _base_asset(symbol)
+    timeline = await asset_service.get_timeline_snapshot(db, base_asset, interval, limit=limit)
+    trading_pair = asset_service.to_trading_pair(base_asset)
+
+    return AssetTimelineOut(
+        symbol=trading_pair,
+        interval=interval,
+        entries=[
+            TimelineEntryOut(
+                time=e.time,
+                score=round(e.score, 1),
+                confidence=round(e.confidence, 1),
+                direction=e.direction,
+                change_summary=e.change_summary,
+                reasons=e.reasons,
+                strengthened_factors=e.strengthened_factors,
+                weakened_factors=e.weakened_factors,
+                data_status=e.data_status,
+            )
+            for e in timeline.entries
+        ],
+    )
