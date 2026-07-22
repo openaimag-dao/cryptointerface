@@ -4,6 +4,7 @@ import { Star } from "lucide-react";
 
 import { cn, formatCompactNumber, formatCurrency, formatPercent } from "@/lib/utils";
 import { useAssetSummary } from "@/hooks/use-asset";
+import { useWatchlistStore } from "@/store/watchlist-store";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,10 @@ function PlainStat({ label, value }: { label: string; value: string }) {
 
 export function AssetTopBar({ baseAsset }: AssetTopBarProps) {
   const { data: summary, isLoading } = useAssetSummary(baseAsset);
+  const symbol = `${baseAsset.toUpperCase()}USDT`;
+  const watched = useWatchlistStore((state) => Boolean(state.items[symbol]));
+  const addSymbol = useWatchlistStore((state) => state.addSymbol);
+  const removeSymbol = useWatchlistStore((state) => state.removeSymbol);
 
   if (isLoading || !summary) {
     return (
@@ -100,9 +105,14 @@ export function AssetTopBar({ baseAsset }: AssetTopBarProps) {
           <PlainStat label="Confidence" value={summary.confidence !== null ? `${Math.round(summary.confidence)}%` : "—"} />
         </div>
 
-        <Button variant="outline" size="sm" disabled className="gap-1.5" title="Watchlist is coming in a future update">
-          <Star className="size-3.5" />
-          Add to Watchlist
+        <Button
+          variant={watched ? "secondary" : "outline"}
+          size="sm"
+          className={cn("gap-1.5", watched && "border-accent/40 bg-accent-dim text-accent")}
+          onClick={() => (watched ? removeSymbol(symbol) : addSymbol(symbol))}
+        >
+          <Star className={cn("size-3.5", watched && "fill-current")} />
+          {watched ? "In Watchlist" : "Add to Watchlist"}
         </Button>
       </div>
     </Card>

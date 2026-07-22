@@ -24,6 +24,7 @@ from app.schemas.asset import (
     AssetSummaryOut,
     AssetTechnicalOut,
     AssetWhalesOut,
+    CorrelationReadingOut,
     FundingHistoryPointOut,
     HistoryPointOut,
     IndicatorReadingOut,
@@ -319,3 +320,18 @@ async def get_asset_history(
         score_history=[HistoryPointOut(time=t, value=round(v, 1)) for t, v in history.score_history],
         confidence_history=[HistoryPointOut(time=t, value=round(v, 1)) for t, v in history.confidence_history],
     )
+
+
+@router.get("/{symbol}/correlation", response_model=list[CorrelationReadingOut])
+async def get_asset_correlation(
+    symbol: str,
+    interval: str = Query("1h", description="One of: " + ", ".join(TIMEFRAME_SECONDS)),
+    db: AsyncSession = Depends(get_db),
+) -> list[CorrelationReadingOut]:
+    _validate_interval(interval)
+    base_asset = _base_asset(symbol)
+    readings = await asset_service.get_correlation_snapshot(db, base_asset, interval)
+    return [
+        CorrelationReadingOut(reference=r.reference, coefficient=r.coefficient, data_points=r.data_points)
+        for r in readings
+    ]

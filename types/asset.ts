@@ -205,3 +205,9 @@ export interface AssetHistory {
   scoreHistory: HistoryPoint[];
   confidenceHistory: HistoryPoint[];
 }
+
+export interface CorrelationReading {
+  reference: string;
+  coefficient: number | null;
+  dataPoints: number;
+}

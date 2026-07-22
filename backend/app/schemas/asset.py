@@ -209,3 +209,9 @@ class AssetHistoryOut(CamelModel):
     avg_loss_pnl_percent: float | None
     score_history: list[HistoryPointOut]
     confidence_history: list[HistoryPointOut]
+
+
+class CorrelationReadingOut(CamelModel):
+    reference: str
+    coefficient: float | None
+    data_points: int

@@ -32,6 +32,7 @@ from app.models.whale import WhaleEvent
 from app.schemas.indicator import IndicatorSnapshot
 from app.services.coingecko.client import CoinGeckoRestClient, MarketSnapshot
 from app.services.coingecko.symbols import coingecko_id_for_symbol
+from app.services.correlation_service import CorrelationReading, compute_correlations
 from app.services.history_service import HISTORY_LIMIT, HistorySummary, get_history_summary
 from app.services.indicators.engine import compute_indicators
 from app.services.macro_repository import get_latest_points
@@ -512,3 +513,13 @@ async def get_history_snapshot(
 ) -> HistorySummary:
     symbol = to_trading_pair(base_asset)
     return await get_history_summary(db, symbol, interval, limit=limit)
+
+
+# ---------------------------------------------------------------------------
+# Correlation tab
+# ---------------------------------------------------------------------------
+
+
+async def get_correlation_snapshot(db: AsyncSession, base_asset: str, interval: str = "1h") -> list[CorrelationReading]:
+    symbol = to_trading_pair(base_asset)
+    return await compute_correlations(db, symbol, interval)

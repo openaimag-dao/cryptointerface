@@ -6,7 +6,6 @@ import dynamic from "next/dynamic";
 
 import { PageHeader } from "@/components/common/page-header";
 import { AssetTopBar } from "@/components/assets/asset-top-bar";
-import { TabPlaceholder } from "@/components/assets/tab-placeholder";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -14,6 +13,18 @@ const OverviewTab = dynamic(() => import("@/components/assets/overview-tab").the
   loading: () => <Skeleton className="h-[420px] w-full rounded-lg" />,
 });
 const TechnicalTab = dynamic(() => import("@/components/assets/technical-tab").then((m) => m.TechnicalTab), {
+  loading: () => <Skeleton className="h-[420px] w-full rounded-lg" />,
+});
+const DerivativesTab = dynamic(() => import("@/components/assets/derivatives-tab").then((m) => m.DerivativesTab), {
+  loading: () => <Skeleton className="h-[420px] w-full rounded-lg" />,
+});
+const WhalesTab = dynamic(() => import("@/components/assets/whales-tab").then((m) => m.WhalesTab), {
+  loading: () => <Skeleton className="h-[420px] w-full rounded-lg" />,
+});
+const NewsTab = dynamic(() => import("@/components/assets/news-tab").then((m) => m.NewsTab), {
+  loading: () => <Skeleton className="h-[420px] w-full rounded-lg" />,
+});
+const MacroTab = dynamic(() => import("@/components/assets/macro-tab").then((m) => m.MacroTab), {
   loading: () => <Skeleton className="h-[420px] w-full rounded-lg" />,
 });
 const SentimentTab = dynamic(() => import("@/components/assets/sentiment-tab").then((m) => m.SentimentTab), {
@@ -69,16 +80,16 @@ export default function AssetDetailPage() {
           <TechnicalTab baseAsset={baseAsset} />
         </TabsContent>
         <TabsContent value="derivatives">
-          <TabPlaceholder label="Derivatives" />
+          <DerivativesTab baseAsset={baseAsset} />
         </TabsContent>
         <TabsContent value="whales">
-          <TabPlaceholder label="Whale Intelligence" />
+          <WhalesTab baseAsset={baseAsset} />
         </TabsContent>
         <TabsContent value="news">
-          <TabPlaceholder label="News Center" />
+          <NewsTab baseAsset={baseAsset} />
         </TabsContent>
         <TabsContent value="macro">
-          <TabPlaceholder label="Macro" />
+          <MacroTab baseAsset={baseAsset} />
         </TabsContent>
         <TabsContent value="sentiment">
           <SentimentTab baseAsset={baseAsset} />

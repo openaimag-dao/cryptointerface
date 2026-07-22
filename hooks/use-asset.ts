@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import {
   fetchAssetAnalysis,
+  fetchAssetCorrelation,
   fetchAssetDerivatives,
   fetchAssetHistory,
   fetchAssetMacro,
@@ -98,6 +99,15 @@ export function useAssetHistory(symbol: string, interval = "1h") {
   return useQuery({
     queryKey: ["asset-history", symbol, interval],
     queryFn: () => fetchAssetHistory(symbol, interval),
+    enabled: Boolean(symbol),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useAssetCorrelation(symbol: string, interval = "1h") {
+  return useQuery({
+    queryKey: ["asset-correlation", symbol, interval],
+    queryFn: () => fetchAssetCorrelation(symbol, interval),
     enabled: Boolean(symbol),
     refetchInterval: 60_000,
   });

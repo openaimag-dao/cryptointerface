@@ -8,6 +8,7 @@ import type {
   AssetSummary,
   AssetTechnical,
   AssetWhales,
+  CorrelationReading,
   MacroInfluenceReading,
   NewsItem,
 } from "@/types";
@@ -89,5 +90,13 @@ export async function fetchAssetHistory(symbol: string, interval = "1h"): Promis
     return await apiFetch<AssetHistory>(`/api/assets/${symbol}/history?interval=${interval}`);
   } catch {
     return null;
+  }
+}
+
+export async function fetchAssetCorrelation(symbol: string, interval = "1h"): Promise<CorrelationReading[]> {
+  try {
+    return await apiFetch<CorrelationReading[]>(`/api/assets/${symbol}/correlation?interval=${interval}`);
+  } catch {
+    return [];
   }
 }

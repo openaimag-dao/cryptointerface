@@ -1,20 +1,32 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { Pin, StickyNote, X } from "lucide-react";
 
 import { cn, formatCompactNumber, formatCurrency, formatPercent } from "@/lib/utils";
 import type { AssetQuote } from "@/types";
+import { useWatchlistStore } from "@/store/watchlist-store";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DirectionBadge } from "@/components/common/direction-badge";
 import { AiScoreRing } from "@/components/common/ai-score-ring";
 
 interface AssetCardProps {
   asset: AssetQuote;
   index?: number;
+  /** Show pin/remove/note controls — only meaningful when this card
+   * represents a real entry in the user's watchlist, not the default
+   * fallback list shown before they've added anything. */
+  showWatchlistControls?: boolean;
 }
 
-export function AssetCard({ asset, index = 0 }: AssetCardProps) {
+export function AssetCard({ asset, index = 0, showWatchlistControls = false }: AssetCardProps) {
   const isUp = asset.changePercent24h >= 0;
+  const item = useWatchlistStore((state) => state.items[asset.symbol]);
+  const removeSymbol = useWatchlistStore((state) => state.removeSymbol);
+  const togglePin = useWatchlistStore((state) => state.togglePin);
+  const setNote = useWatchlistStore((state) => state.setNote);
 
   return (
     <motion.div
@@ -29,6 +41,45 @@ export function AssetCard({ asset, index = 0 }: AssetCardProps) {
             isUp ? "bg-gradient-to-b from-accent/10 to-transparent" : "bg-gradient-to-b from-danger/10 to-transparent",
           )}
         />
+
+        {showWatchlistControls && item ? (
+          <div className="absolute right-3 top-3 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="size-6" title="Note">
+                  <StickyNote className={cn("size-3.5", item.note && "text-accent")} />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end">
+                <textarea
+                  defaultValue={item.note}
+                  onBlur={(e) => setNote(asset.symbol, e.target.value)}
+                  placeholder="Add a note…"
+                  rows={3}
+                  className="w-full resize-none rounded-md border border-border-subtle bg-white/[0.03] px-3 py-2 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-accent/50"
+                />
+              </PopoverContent>
+            </Popover>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              title={item.pinned ? "Unpin" : "Pin"}
+              onClick={() => togglePin(asset.symbol)}
+            >
+              <Pin className={cn("size-3.5", item.pinned && "fill-current text-accent")} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              title="Remove from watchlist"
+              onClick={() => removeSymbol(asset.symbol)}
+            >
+              <X className="size-3.5" />
+            </Button>
+          </div>
+        ) : null}
 
         <div className="relative flex items-start justify-between">
           <div>

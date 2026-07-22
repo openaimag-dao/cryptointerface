@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DirectionBadge } from "@/components/common/direction-badge";
 import { StatTile } from "@/components/common/stat-tile";
 import { LineChart } from "@/components/charts/line-chart";
+import { CorrelationPanel } from "@/components/assets/correlation-panel";
 import type { HistoryPoint, SignalOutcomeStatus } from "@/types";
 
 interface HistoryTabProps {
@@ -96,6 +97,8 @@ export function HistoryTab({ baseAsset, interval = "1h" }: HistoryTabProps) {
           </CardContent>
         </Card>
       </div>
+
+      <CorrelationPanel baseAsset={baseAsset} interval={interval} />
 
       <Card className="overflow-hidden">
         <CardHeader className="pb-2">
