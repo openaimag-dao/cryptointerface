@@ -95,6 +95,17 @@ class LiquidationClusterOut(CamelModel):
     event_count: int
 
 
+ExchangeDataStatus = Literal["AVAILABLE", "NOT_YET_IMPLEMENTED"]
+
+
+class ExchangeBreakdownOut(CamelModel):
+    exchange: str
+    status: ExchangeDataStatus
+    open_interest: float | None
+    funding_rate: float | None
+    note: str
+
+
 class AssetDerivativesOut(CamelModel):
     symbol: str
     funding_rate: float | None
@@ -104,6 +115,7 @@ class AssetDerivativesOut(CamelModel):
     open_interest_value: float | None
     oi_delta_percent: float | None
     liquidation_clusters: list[LiquidationClusterOut]
+    exchange_breakdown: list[ExchangeBreakdownOut]
 
 
 class MacroInfluenceReadingOut(CamelModel):

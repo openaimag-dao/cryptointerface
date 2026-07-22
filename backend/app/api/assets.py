@@ -26,6 +26,7 @@ from app.schemas.asset import (
     AssetTimelineOut,
     AssetWhalesOut,
     CorrelationReadingOut,
+    ExchangeBreakdownOut,
     FundingHistoryPointOut,
     HistoryPointOut,
     IndicatorReadingOut,
@@ -159,6 +160,16 @@ async def get_asset_derivatives(symbol: str, db: AsyncSession = Depends(get_db))
                 price_low=c.price_low, price_high=c.price_high, total_usd=c.total_usd, event_count=c.event_count
             )
             for c in derivatives.liquidation_clusters
+        ],
+        exchange_breakdown=[
+            ExchangeBreakdownOut(
+                exchange=e.exchange,
+                status=e.status,
+                open_interest=e.open_interest,
+                funding_rate=e.funding_rate,
+                note=e.note,
+            )
+            for e in derivatives.exchange_breakdown
         ],
     )
 

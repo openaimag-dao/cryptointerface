@@ -91,6 +91,16 @@ export interface LiquidationCluster {
   eventCount: number;
 }
 
+export type ExchangeDataStatus = "AVAILABLE" | "NOT_YET_IMPLEMENTED";
+
+export interface ExchangeBreakdown {
+  exchange: string;
+  status: ExchangeDataStatus;
+  openInterest: number | null;
+  fundingRate: number | null;
+  note: string;
+}
+
 export interface AssetDerivatives {
   symbol: string;
   fundingRate: number | null;
@@ -100,6 +110,7 @@ export interface AssetDerivatives {
   openInterestValue: number | null;
   oiDeltaPercent: number | null;
   liquidationClusters: LiquidationCluster[];
+  exchangeBreakdown: ExchangeBreakdown[];
 }
 
 export interface AssetWhales {

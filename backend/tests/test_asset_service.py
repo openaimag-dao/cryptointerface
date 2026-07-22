@@ -129,6 +129,10 @@ async def test_get_derivatives_snapshot_with_no_data_is_empty_but_not_none(db_se
     assert derivatives.funding_rate is None
     assert derivatives.open_interest is None
     assert derivatives.liquidation_clusters == []
+    assert derivatives.exchange_breakdown[0].exchange == "Binance"
+    assert derivatives.exchange_breakdown[0].status == "AVAILABLE"
+    assert derivatives.exchange_breakdown[0].open_interest is None
+    assert all(e.status == "NOT_YET_IMPLEMENTED" for e in derivatives.exchange_breakdown[1:])
 
 
 @pytest.mark.asyncio
@@ -153,6 +157,8 @@ async def test_get_derivatives_snapshot_buckets_liquidations_and_computes_oi_del
     assert derivatives.oi_delta_percent == pytest.approx(25.0)
     assert sum(c.event_count for c in derivatives.liquidation_clusters) == 10
     assert len(derivatives.liquidation_clusters) <= 6
+    assert derivatives.exchange_breakdown[0].open_interest == 5_000.0
+    assert derivatives.exchange_breakdown[0].funding_rate == 0.0002
 
 
 @pytest.mark.asyncio

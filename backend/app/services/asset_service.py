@@ -253,6 +253,15 @@ class LiquidationCluster:
 
 
 @dataclass(frozen=True)
+class ExchangeBreakdown:
+    exchange: str
+    status: str  # "AVAILABLE" | "NOT_YET_IMPLEMENTED"
+    open_interest: float | None
+    funding_rate: float | None
+    note: str
+
+
+@dataclass(frozen=True)
 class AssetDerivatives:
     symbol: str
     funding_rate: float | None
@@ -262,11 +271,43 @@ class AssetDerivatives:
     open_interest_value: float | None
     oi_delta_percent: float | None
     liquidation_clusters: list[LiquidationCluster]
+    exchange_breakdown: list[ExchangeBreakdown]
 
 
 LIQUIDATION_CLUSTER_COUNT = 6
 FUNDING_HISTORY_LIMIT = 20
 OI_HISTORY_LIMIT = 20
+
+# Architecture-only per the Sprint 6 spec: this app has exactly one real
+# derivatives data source (Binance USDT-M Futures — see
+# app/services/binance/rest_client.py's docstring for why it stays the
+# only one). Adding another exchange means a new REST/WS client, not a
+# UI change, so these report NOT_YET_IMPLEMENTED honestly rather than
+# faking a number no client here has ever fetched.
+_UNINTEGRATED_EXCHANGES = ("Bybit", "OKX", "Bitget")
+
+
+def _exchange_breakdown(open_interest: float | None, funding_rate: float | None) -> list[ExchangeBreakdown]:
+    entries = [
+        ExchangeBreakdown(
+            exchange="Binance",
+            status="AVAILABLE",
+            open_interest=open_interest,
+            funding_rate=funding_rate,
+            note="Live USDT-M Futures data.",
+        )
+    ]
+    entries.extend(
+        ExchangeBreakdown(
+            exchange=name,
+            status="NOT_YET_IMPLEMENTED",
+            open_interest=None,
+            funding_rate=None,
+            note="No client integrated for this exchange yet.",
+        )
+        for name in _UNINTEGRATED_EXCHANGES
+    )
+    return entries
 
 
 def _bucket_liquidations(events: list, cluster_count: int = LIQUIDATION_CLUSTER_COUNT) -> list[LiquidationCluster]:
@@ -323,6 +364,9 @@ async def get_derivatives_snapshot(db: AsyncSession, base_asset: str) -> AssetDe
         open_interest_value=open_interest.open_interest_value if open_interest else None,
         oi_delta_percent=oi_delta_percent,
         liquidation_clusters=_bucket_liquidations(liquidations),
+        exchange_breakdown=_exchange_breakdown(
+            open_interest.open_interest if open_interest else None, funding.funding_rate if funding else None
+        ),
     )
 
 
