@@ -221,6 +221,39 @@ Set `ANTHROPIC_API_KEY` in `.env` to enable it (get one at
 the endpoint replies with a "not configured" message instead of erroring —
 same fail-open philosophy as the rest of the Data Engine.
 
+### Portfolio (Binance Futures account)
+
+`GET /api/portfolio` (`app/services/portfolio_service.py` +
+`app/services/binance/account_client.py`) reads a **single shared** Binance
+USDT-M Futures account — this app has no user/auth system, so there is one
+demo/service account behind `BINANCE_API_KEY`/`BINANCE_API_SECRET` in
+`.env`, not per-user credentials. `rest_client.py` stays public-market-data
+only on purpose; `account_client.py` is the one place that sends signed
+requests (HMAC-SHA256 over the query string, `X-MBX-APIKEY` header), against:
+
+- `GET /fapi/v2/balance` — wallet/available balance
+- `GET /fapi/v2/positionRisk` — open positions (signed `positionAmt`:
+  positive = LONG, negative = SHORT; entry/mark price; unrealized PnL)
+- `GET /fapi/v1/userTrades` (per watchlist symbol) — fill history, used to
+  reconstruct closed-trade history
+
+Trade history is derived, never fabricated: only fills with a non-zero
+`realizedPnl` (i.e. fills that closed or reduced a position) become a
+history entry. Direction comes from the fill's own `side` in one-way
+position mode — a SELL fill realizing PnL closed a LONG, a BUY fill closed
+a SHORT — never guessed from the sign of the PnL, since both directions can
+realize a profit or a loss. The entry price isn't returned by this endpoint
+either, so it's back-derived from the realized-PnL formula:
+`entry_price = exit_price - realized_pnl / qty` for a LONG close, and
+`exit_price + realized_pnl / qty` for a SHORT close.
+
+Same fail-open philosophy as everywhere else: no API key configured, or the
+account/network call failing, makes `get_real_portfolio()` return `None`
+without raising, and `app/api/portfolio.py` falls back to
+`mock_data.get_portfolio()` — the endpoint never 500s because of this
+integration. Leave `BINANCE_API_KEY`/`BINANCE_API_SECRET` blank to keep
+Portfolio on mock data.
+
 ## Intelligence Layer (Sprint 4)
 
 `app/intelligence/` sits alongside the Data Engine and AI Decision Engine —
