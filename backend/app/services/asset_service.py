@@ -200,7 +200,7 @@ async def get_technical_snapshot(db: AsyncSession, base_asset: str, interval: st
 
     snapshot: IndicatorSnapshot = compute_indicators(symbol, interval, ctx.candles)
     indicators = explain_indicators(snapshot, ctx.closes, ctx.volumes)
-    smart_money = analyze_smart_money(ctx.closes, ctx.highs, ctx.lows)
+    smart_money = analyze_smart_money(ctx.closes, ctx.highs, ctx.lows, ctx.opens, ctx.volumes)
 
     decision = analyze_market(ctx)
     structure = decision.factors.get("structure")
