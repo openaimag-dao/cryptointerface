@@ -104,7 +104,10 @@ app = FastAPI(
     "Intelligence Layer (macro/news/whales/sentiment/LLM-explanation, see app/intelligence/), a "
     "Claude-backed AI Chat assistant, and a Sprint 5 Backtesting Engine that replays the "
     "unmodified Decision Engine bar by bar with no look-ahead (see app/backtesting/). "
-    "Portfolio still serves mock data pending a future sprint.",
+    "Portfolio reads a single service Binance Futures account's real balance/positions/trade "
+    "history when BINANCE_API_KEY/SECRET are configured, falling back to mock data otherwise "
+    "(see app/services/portfolio_service.py) — this app has no user/auth system, so there is "
+    "exactly one portfolio.",
     version="0.2.0",
     lifespan=lifespan,
 )
@@ -161,7 +164,8 @@ app.include_router(backtesting.router)
 # `/api/assets/{symbol}/*`. No new computation, see backend/README.md.
 app.include_router(assets.router)
 
-# Still mock (portfolio) — out of scope until a future sprint.
+# Real when BINANCE_API_KEY/SECRET are configured (falls back to mock
+# otherwise) — see app/services/portfolio_service.py.
 app.include_router(portfolio.router)
 
 

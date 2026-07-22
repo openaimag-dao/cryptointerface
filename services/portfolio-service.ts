@@ -1,7 +1,6 @@
-import { getMockPortfolio } from "@/lib/mock/portfolio";
-import { mockDelay } from "@/lib/mock/delay";
+import { apiFetch } from "@/lib/api-client";
 import type { PortfolioSummary } from "@/types";
 
 export async function fetchPortfolio(): Promise<PortfolioSummary> {
-  return mockDelay(getMockPortfolio());
+  return apiFetch<PortfolioSummary>("/api/portfolio");
 }

@@ -1,9 +1,8 @@
-from pydantic import BaseModel
-
+from app.schemas.base import CamelModel
 from app.schemas.market import Direction
 
 
-class Position(BaseModel):
+class Position(CamelModel):
     id: str
     symbol: str
     direction: Direction
@@ -16,7 +15,7 @@ class Position(BaseModel):
     opened_at: str
 
 
-class TradeHistoryItem(BaseModel):
+class TradeHistoryItem(CamelModel):
     id: str
     symbol: str
     direction: Direction
@@ -28,7 +27,7 @@ class TradeHistoryItem(BaseModel):
     closed_at: str
 
 
-class PortfolioSummary(BaseModel):
+class PortfolioSummary(CamelModel):
     balance: float
     equity: float
     total_pnl: float
