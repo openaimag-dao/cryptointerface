@@ -73,7 +73,8 @@ export function WhalesTab({ baseAsset }: WhalesTabProps) {
           {whales.events.length === 0 ? (
             <p className="px-5 pb-5 text-xs text-muted-foreground">No tracked whale activity for this asset yet.</p>
           ) : (
-            <Table>
+            <div className="max-h-[420px] overflow-y-auto">
+              <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead>Direction</TableHead>
@@ -111,7 +112,8 @@ export function WhalesTab({ baseAsset }: WhalesTabProps) {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -714,10 +714,13 @@ performance with the exact same formulas documented above.
    iterate over `settings.symbol_list`, and the frontend's `/api/market`
    call already renders whatever the backend returns.
 
-If you also want it in the frontend's fixed 4-symbol Dashboard watchlist,
-add it to `WATCHLIST_SYMBOLS` in `lib/constants.ts` (and optionally to the
-AI-score overlay in `lib/mock/ai-overlay.ts` — otherwise it falls back to a
-neutral WAIT/50 placeholder until the real AI module exists).
+The frontend Dashboard's watchlist grid reads from the user's real,
+browser-persisted watchlist (`store/watchlist-store.ts`) once they've added
+anything — see "Asset Intelligence Dashboard" below — and only falls back
+to the fixed `WATCHLIST_SYMBOLS` in `lib/constants.ts` before that. A newly
+added symbol also needs an entry in the AI-score overlay in
+`lib/mock/ai-overlay.ts` for the Markets table/Dashboard cards' `aiScore`
+field, otherwise it falls back to a neutral WAIT/50 placeholder.
 
 ## How to add a new indicator
 
@@ -739,3 +742,189 @@ No database migration is needed — `indicator_values.payload` is a JSON
 column that stores whatever `IndicatorSnapshot` serializes to, so a new
 indicator field just starts appearing in both `/api/indicators/{symbol}`
 and the `"indicators"` WebSocket channel the next time a candle closes.
+
+## Asset Intelligence Dashboard (Sprint 8)
+
+A per-symbol research terminal at the frontend route `/assets/{symbol}`
+(e.g. `/assets/BTC`) — everything a trader would want to know about one
+coin, on one page. The architecture supports any symbol the Data Engine
+already tracks; there is no per-coin registration step beyond "How to add
+a new coin" above.
+
+**This module adds no new computation.** Every field on every tab is
+either read straight from an existing engine/repository, or is a small,
+pure, deterministic transform of values those engines already produce.
+That's a deliberate boundary: the AI Decision Engine (`AI_ENGINE.md`) and
+Backtesting Engine (above) stay the single source of truth for scoring
+and risk, and this dashboard never duplicates or forks their logic.
+
+### Backend: the aggregation layer
+
+`app/services/asset_service.py` is the seam — one function per tab,
+each combining a handful of existing calls into the shape the tab needs.
+It never talks to the database directly for anything an existing
+repository/engine already fetches; it just orchestrates. The URL uses the
+bare asset (`BTC`), the Data Engine's tables key off the USDT trading pair
+(`BTCUSDT`) — `to_trading_pair()`/`to_base_asset()` convert between them
+with a plain string suffix (every configured quote asset in this app is
+USDT, so there's no lookup table to keep in sync).
+
+Three small new modules feed tabs that didn't have an existing engine to
+wrap:
+
+- **`app/ai_engine/indicator_explain.py`** — turns each raw indicator value
+  from `IndicatorSnapshot` into a `(value, status, explanation)` triple for
+  the Technical tab (e.g. `RSI 78.0 → OVERBOUGHT → "RSI at 78.0, above 70
+  — momentum may be stretched."`). Pure, no I/O.
+- **`app/ai_engine/smart_money.py`** — Break of Structure, Equal Highs, and
+  Equal Lows are computed for real from the same swing-point detector
+  `scoring/structure.py` already uses. The other five ICT/SMC concepts
+  (Change of Character, Order Blocks, Fair Value Gaps, Liquidity Zones,
+  Liquidity Sweep) have no detector anywhere in this codebase yet and are
+  reported as `NOT_YET_IMPLEMENTED` with a one-line description of what a
+  real detector would need — never a fabricated read. Each concept is one
+  function in the `_CONCEPT_BUILDERS` list with the same
+  `(closes, highs, lows) -> SmartMoneyConcept` signature; adding a real
+  detector later is a one-function swap, see "Adding a new analytical
+  module" below.
+- **`app/ai_engine/scenario_analysis.py`** — the AI Analysis tab's three
+  Bullish/Neutral/Bearish scenarios. Probabilities are a deterministic
+  function of the Decision Engine's own `market_score` and `confidence`
+  (never random): `confidence` sets how much probability mass is
+  "inconclusive" (Neutral), and the rest splits between Bullish/Bearish in
+  proportion to how far `market_score` leans off its neutral midpoint (50).
+  Conditions and price targets are built from the same `FactorScore`s and
+  ATR/structure levels `risk_engine.py` already computes.
+- **`app/ai_engine/risk_analysis.py`** — ATR-based Risk Level, a
+  max-recommended-leverage heuristic (inversely proportional to ATR as a
+  percentage of price — a transparent risk-sizing heuristic, not a broker-
+  or backtest-verified guarantee), and Drawdown Risk (reuses the Risk
+  Engine's stop distance).
+- **`app/services/correlation_service.py`** — Pearson correlation of
+  period-over-period returns vs BTC/ETH (real, computed from this app's own
+  candle history) and NASDAQ/S&P 500/Gold/DXY (same computation, against
+  the Sprint 4 Macro Engine's `macro_data` history — thin today since that
+  poller only just started running; returns `None` below
+  `CORRELATION_MIN_DATA_POINTS` matched readings rather than a number
+  computed from too little data to mean anything).
+- **`app/services/history_service.py`** — the History tab's Win Rate and
+  average win/loss. Every `/api/ai/*` call already persists a decision to
+  `ai_analysis`; this module replays each past decision that had an active
+  LONG/SHORT call against the *real* candles that followed it, checking
+  whether TP1 or the stop was hit first over a bounded horizon
+  (`OUTCOME_HORIZON_BARS`), using the same conservative "stop wins on a
+  same-bar conflict" rule `app/backtesting/trade_simulator.py` uses. This
+  is a per-signal outcome check, not a continuous strategy backtest.
+
+### API endpoints
+
+All under `/api/assets/{symbol}` (symbol accepts either `BTC` or
+`BTCUSDT`), all read-only, all returning `404` when there isn't enough
+candle history yet (same convention as `/api/ai/*`):
+
+| Endpoint | Tab | Notes |
+|---|---|---|
+| `GET /api/assets/{symbol}` | Top bar | price/24h/7d/30d/market cap/volume/funding/OI/AI score |
+| `GET /api/assets/{symbol}/overview` | Overview | Trend/Volatility + ATR/RSI/MACD/EMA-Alignment/VWAP |
+| `GET /api/assets/{symbol}/technical` | Technical | full indicator list + Smart Money + support/resistance |
+| `GET /api/assets/{symbol}/derivatives` | Derivatives | funding (+history+trend), OI (+history+delta), liquidation clusters |
+| `GET /api/assets/{symbol}/whales` | Whales | whale score, recent events, 24h exchange flow |
+| `GET /api/assets/{symbol}/news` | News | news filtered to this symbol |
+| `GET /api/assets/{symbol}/macro` | Macro | market-wide macro backdrop (not per-symbol — see the Macro Engine's own docs) |
+| `GET /api/assets/{symbol}/sentiment` | Sentiment | breakdown + radar (Social is always `null` — no Social Engine exists) |
+| `GET /api/assets/{symbol}/analysis` | AI Analysis | direction/confidence/market score/entry-stop-TP1-3/risk-reward/reasons/scenarios/risk |
+| `GET /api/assets/{symbol}/history` | History | win rate, avg win/loss, per-signal outcomes, score/confidence history |
+| `GET /api/assets/{symbol}/correlation` | History (embedded) | Pearson coefficient vs BTC/ETH/NASDAQ/SP500/GOLD/DXY |
+
+`overview`/`technical`/`analysis`/`sentiment` accept `?interval=` (default
+`1h`, one of `TIMEFRAME_SECONDS`); `whales`/`news`/`history` accept
+`?limit=`.
+
+### Frontend
+
+`app/(terminal)/assets/[symbol]/page.tsx` is a client component that reads
+`symbol` from the route, normalizes it to upper case, and renders the top
+bar (`components/assets/asset-top-bar.tsx`) plus a 9-tab `Tabs` layout. Each
+tab component is its own file under `components/assets/` and is loaded via
+`next/dynamic` (code-split, with a `Skeleton` fallback) — a coin's page
+never ships JS for a tab the user hasn't opened.
+
+The **watchlist** (`store/watchlist-store.ts`) is a Zustand store persisted
+to `localStorage`, keyed by trading pair, storing `{ pinned, note, addedAt }`
+per symbol. The top bar's "Add to Watchlist" star toggles the current
+symbol in/out of it. The Dashboard's `AssetCardGrid` reads from it (pinned
+first, then most-recently-added) and falls back to the fixed
+`WATCHLIST_SYMBOLS` list until the user has added anything; each card gets
+hover-or-focus-revealed pin/note/remove controls (`components/dashboard/asset-card.tsx`).
+
+### Adding a new analytical module
+
+The dashboard's tabs are intentionally uniform in shape, so adding a new
+one is mechanical:
+
+1. **Backend**: write a pure function (or a small class of them) that takes
+   already-available data (a `MarketContext`, an `AIDecision`, or a
+   repository query result) and returns a small `@dataclass`. Put it in
+   `app/ai_engine/` if it's a scoring/analysis concept, or
+   `app/services/` if it's a data-aggregation concept — follow whichever
+   of `scenario_analysis.py` / `correlation_service.py` is the closer
+   shape. Add a wrapper in `asset_service.py` that calls
+   `to_trading_pair()`, fetches whatever context it needs, and returns your
+   dataclass (or `None` for "not enough data").
+2. Add a `CamelModel` response schema to `app/schemas/asset.py` mirroring
+   the dataclass's fields (`snake_case` in Python, auto-converted to
+   `camelCase` on the wire).
+3. Add a `GET /api/assets/{symbol}/<name>` endpoint to `app/api/assets.py`
+   calling the new `asset_service` function and converting to the schema
+   — copy the `404`-on-`None` pattern the existing endpoints use.
+4. Write unit tests for the pure function(s) against a synthetic
+   `MarketContext` (see `tests/test_scenario_analysis.py`) — no database
+   needed unless the module reads its own repository, in which case follow
+   `tests/test_asset_service.py`'s `db_session` fixture pattern.
+5. **Frontend**: add the matching TypeScript interface to `types/asset.ts`,
+   a `fetchAsset<Name>()` in `services/asset-service.ts`, a
+   `useAsset<Name>()` hook in `hooks/use-asset.ts`, and a tab component
+   under `components/assets/`. Wire it into the `TAB_ITEMS` array and a new
+   `TabsContent` in `app/(terminal)/assets/[symbol]/page.tsx`, loaded via
+   `next/dynamic` like the existing tabs.
+
+The Smart Money module (`app/ai_engine/smart_money.py`) is the reference
+example for "architecture ready, concept not yet real": each concept is one
+function with the same signature in `_CONCEPT_BUILDERS`, so swapping a
+`NOT_YET_IMPLEMENTED` placeholder for a real detector never touches the
+caller.
+
+### Known limitations
+
+- **Smart Money**: only Break of Structure/Equal Highs/Equal Lows are real
+  today (see above); the other five ICT concepts are placeholders.
+- **Correlation**: BTC/ETH references are real now; NASDAQ/S&P 500/Gold/DXY
+  need the Macro Engine to accumulate `CORRELATION_MIN_DATA_POINTS` (20)
+  matched readings before they stop returning `null`.
+- **Whale coverage**: only ETH and LINK have an Ethereum-based footprint
+  (see `app/intelligence/whales/addresses.py`) — other symbols' Whales tab
+  reads a neutral, zero-conviction score with no events.
+- **Sentiment radar's Social axis**: always `null` — there is no Social
+  Engine anywhere in this codebase yet.
+- **History tab win rate**: only resolves signals that had an active
+  LONG/SHORT call *and* whose TP1/stop was hit within
+  `OUTCOME_HORIZON_BARS` (100) bars of the signal; older or still-open
+  signals show as `OPEN`/`NO_TRADE` and are excluded from the win-rate
+  denominator.
+- **Scenario Analysis probabilities** are a transparent, auditable formula
+  over the Decision Engine's own outputs — not a machine-learned or
+  backtested probability distribution. Documented as a heuristic, not a
+  forecast guarantee.
+
+### Ready for Sprint 5 (Backtesting) and future Paper Trading
+
+- The History tab's outcome resolution already replays TP1/stop against
+  real forward candles using the exact same conservative fill rule the
+  Backtesting Engine's `trade_simulator.py` uses — the two are logically
+  consistent, so a future "run this symbol's history through the full
+  Backtesting Engine" link is a straightforward extension, not a rewrite.
+- `asset_service.py`'s per-tab functions all take a `base_asset` and
+  `interval` and return typed dataclasses with no framework coupling —
+  they're already usable from a background job (e.g. a Paper Trading
+  engine wanting a symbol's current AI Analysis) without going through
+  the HTTP layer at all.

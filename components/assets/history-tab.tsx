@@ -108,6 +108,7 @@ export function HistoryTab({ baseAsset, interval = "1h" }: HistoryTabProps) {
           {history.signals.length === 0 ? (
             <p className="py-6 text-center text-xs text-muted-foreground">No signals recorded for this symbol yet.</p>
           ) : (
+            <div className="max-h-[480px] overflow-y-auto">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -170,6 +171,7 @@ export function HistoryTab({ baseAsset, interval = "1h" }: HistoryTabProps) {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>

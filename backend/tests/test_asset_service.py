@@ -154,6 +154,20 @@ async def test_get_derivatives_snapshot_buckets_liquidations_and_computes_oi_del
 
 
 @pytest.mark.asyncio
+async def test_get_derivatives_snapshot_funding_trend_matches_schema_literal(db_session):
+    # Two funding readings so `funding_trend` actually takes the non-NEUTRAL
+    # branch — the schema (app/schemas/asset.py's TrendDirection) only
+    # accepts "UP"/"DOWN"/"NEUTRAL", not "RISING"/"FALLING".
+    await insert_funding(db_session, "TESTUSDT", 0.0001, 150.0, 1_700_800_000)
+    await insert_funding(db_session, "TESTUSDT", 0.0003, 150.0, 1_700_900_000)
+
+    derivatives = await get_derivatives_snapshot(db_session, "TEST")
+
+    assert derivatives.funding_trend in ("UP", "DOWN", "NEUTRAL")
+    assert derivatives.funding_trend == "UP"
+
+
+@pytest.mark.asyncio
 async def test_get_whales_snapshot_with_no_events(db_session):
     whales = await get_whales_snapshot(db_session, "TEST")
 

@@ -65,7 +65,7 @@ export default function AssetDetailPage() {
       <AssetTopBar baseAsset={baseAsset} />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="flex-wrap">
+        <TabsList className="h-auto flex-wrap">
           {TAB_ITEMS.map((item) => (
             <TabsTrigger key={item.value} value={item.value}>
               {item.label}

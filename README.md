@@ -55,7 +55,14 @@ too — see **[backend/README.md](backend/README.md)**'s "Intelligence
 Layer" section. Backtesting (Sprint 5) is real as well — it replays the
 same unmodified AI Decision Engine bar by bar over historical candles
 with no look-ahead bias, see backend/README.md's "Backtesting Engine"
-section. Portfolio and the Macro economic-calendar tab remain on mock
-data — out of scope until a future sprint. If Binance is unreachable
-from your network, a CoinGecko fallback kicks in
-automatically — see backend/README.md's "CoinGecko fallback" section.
+section. Sprint 8 adds an **Asset Intelligence Dashboard** — a per-symbol
+research terminal at `/assets/{symbol}` (e.g. `/assets/BTC`) with 9 tabs
+(Overview, Technical, Derivatives, Whales, News, Macro, Sentiment, AI
+Analysis, History) plus a persisted Watchlist, all built by aggregating
+the existing engines above with no new computation — see
+backend/README.md's "Asset Intelligence Dashboard" section for the full
+breakdown and how to add a new tab/module. Portfolio and the Macro
+economic-calendar tab remain on mock data — out of scope until a future
+sprint. If Binance is unreachable from your network, a CoinGecko fallback
+kicks in automatically — see backend/README.md's "CoinGecko fallback"
+section.

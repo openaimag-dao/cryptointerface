@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { Pin, StickyNote, X } from "lucide-react";
 
@@ -21,7 +22,7 @@ interface AssetCardProps {
   showWatchlistControls?: boolean;
 }
 
-export function AssetCard({ asset, index = 0, showWatchlistControls = false }: AssetCardProps) {
+function AssetCardImpl({ asset, index = 0, showWatchlistControls = false }: AssetCardProps) {
   const isUp = asset.changePercent24h >= 0;
   const item = useWatchlistStore((state) => state.items[asset.symbol]);
   const removeSymbol = useWatchlistStore((state) => state.removeSymbol);
@@ -34,7 +35,7 @@ export function AssetCard({ asset, index = 0, showWatchlistControls = false }: A
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.05 }}
     >
-      <Card className="group relative overflow-hidden p-5 transition-colors hover:border-border-strong">
+      <Card className="group relative overflow-hidden p-5 transition-colors hover:border-border-strong focus-within:border-border-strong">
         <div
           className={cn(
             "pointer-events-none absolute inset-x-0 top-0 h-24 opacity-0 transition-opacity duration-300 group-hover:opacity-100",
@@ -43,15 +44,19 @@ export function AssetCard({ asset, index = 0, showWatchlistControls = false }: A
         />
 
         {showWatchlistControls && item ? (
-          <div className="absolute right-3 top-3 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="absolute right-3 top-3 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-6" title="Note">
+                <Button variant="ghost" size="icon" className="size-6" title="Note" aria-label={`Note for ${asset.symbol}`}>
                   <StickyNote className={cn("size-3.5", item.note && "text-accent")} />
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end">
+                <label htmlFor={`watchlist-note-${asset.symbol}`} className="sr-only">
+                  Note for {asset.symbol}
+                </label>
                 <textarea
+                  id={`watchlist-note-${asset.symbol}`}
                   defaultValue={item.note}
                   onBlur={(e) => setNote(asset.symbol, e.target.value)}
                   placeholder="Add a note…"
@@ -65,6 +70,8 @@ export function AssetCard({ asset, index = 0, showWatchlistControls = false }: A
               size="icon"
               className="size-6"
               title={item.pinned ? "Unpin" : "Pin"}
+              aria-label={item.pinned ? `Unpin ${asset.symbol}` : `Pin ${asset.symbol}`}
+              aria-pressed={item.pinned}
               onClick={() => togglePin(asset.symbol)}
             >
               <Pin className={cn("size-3.5", item.pinned && "fill-current text-accent")} />
@@ -74,6 +81,7 @@ export function AssetCard({ asset, index = 0, showWatchlistControls = false }: A
               size="icon"
               className="size-6"
               title="Remove from watchlist"
+              aria-label={`Remove ${asset.symbol} from watchlist`}
               onClick={() => removeSymbol(asset.symbol)}
             >
               <X className="size-3.5" />
@@ -110,3 +118,8 @@ export function AssetCard({ asset, index = 0, showWatchlistControls = false }: A
     </motion.div>
   );
 }
+
+// Dashboard cards re-render on every live ticker tick (see
+// hooks/use-market-data.ts's applyLiveTicker) — memoize so an update to
+// one symbol's price doesn't re-render every other card in the grid.
+export const AssetCard = memo(AssetCardImpl);

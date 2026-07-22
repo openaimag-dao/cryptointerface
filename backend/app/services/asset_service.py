@@ -292,7 +292,7 @@ async def get_derivatives_snapshot(db: AsyncSession, base_asset: str) -> AssetDe
     funding_trend = "NEUTRAL"
     if len(funding_history_rows) >= 2:
         first, last = funding_history_rows[0][1], funding_history_rows[-1][1]
-        funding_trend = "RISING" if last > first else "FALLING" if last < first else "NEUTRAL"
+        funding_trend = "UP" if last > first else "DOWN" if last < first else "NEUTRAL"
 
     oi_delta_percent = None
     if len(oi_history) >= 2 and oi_history[0].open_interest > 0:
