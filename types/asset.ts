@@ -58,6 +58,8 @@ export interface AssetOverview {
   macd: IndicatorReading;
   emaAlignment: IndicatorReading;
   vwap: IndicatorReading;
+  volumeTrend: IndicatorReading;
+  liquidityScore: IndicatorReading;
 }
 
 export interface SmartMoneyConcept {

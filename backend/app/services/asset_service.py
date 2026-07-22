@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_engine.decision_engine import AIDecision, analyze_market
-from app.ai_engine.indicator_explain import IndicatorReading, explain_indicators
+from app.ai_engine.indicator_explain import IndicatorReading, explain_indicators, liquidity_score_reading
 from app.ai_engine.market_context import build_market_context
 from app.ai_engine.risk_analysis import RiskAnalysis, analyze_risk
 from app.ai_engine.scenario_analysis import Scenario, analyze_scenarios
@@ -143,6 +143,8 @@ class AssetOverview:
     macd: IndicatorReading
     ema_alignment: IndicatorReading
     vwap: IndicatorReading
+    volume_trend: IndicatorReading
+    liquidity_score: IndicatorReading
 
 
 _OVERVIEW_INDICATOR_NAMES = {"ATR (14)", "RSI (14)", "MACD", "EMA Alignment", "VWAP"}
@@ -165,6 +167,15 @@ async def get_overview_snapshot(db: AsyncSession, base_asset: str, interval: str
     trend_factor = decision.factors.get("trend")
     volatility_factor = decision.factors.get("volatility")
 
+    # "Volume Trend" relabels the Technical tab's OBV read rather than
+    # recomputing it, so the two panels never disagree.
+    obv_reading = by_name.get("OBV")
+    volume_trend = (
+        IndicatorReading("Volume Trend", obv_reading.value, obv_reading.status, obv_reading.explanation)
+        if obv_reading
+        else IndicatorReading("Volume Trend", "—", "NEUTRAL", "Not enough history yet.")
+    )
+
     return AssetOverview(
         trend_status=trend_factor.direction if trend_factor else "WAIT",
         volatility_status=volatility_factor.direction if volatility_factor else "WAIT",
@@ -174,6 +185,8 @@ async def get_overview_snapshot(db: AsyncSession, base_asset: str, interval: str
         ema_alignment=by_name.get("EMA Alignment")
         or IndicatorReading("EMA Alignment", "—", "NEUTRAL", "Not enough history yet."),
         vwap=by_name.get("VWAP") or IndicatorReading("VWAP", "—", "NEUTRAL", "Not enough history yet."),
+        volume_trend=volume_trend,
+        liquidity_score=liquidity_score_reading(ctx.closes, ctx.volumes),
     )
 
 

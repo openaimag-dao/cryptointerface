@@ -110,6 +110,8 @@ async def get_asset_overview(
         macd=_indicator_out(overview.macd),
         ema_alignment=_indicator_out(overview.ema_alignment),
         vwap=_indicator_out(overview.vwap),
+        volume_trend=_indicator_out(overview.volume_trend),
+        liquidity_score=_indicator_out(overview.liquidity_score),
     )
 
 

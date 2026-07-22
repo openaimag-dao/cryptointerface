@@ -39,5 +39,5 @@ export const NAV_ITEMS: NavItem[] = [
 // show empty/loading state.
 export const WATCHLIST_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "LINKUSDT"];
 
-export const CHART_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"] as const;
+export const CHART_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d", "1w", "1M"] as const;
 export type ChartTimeframe = (typeof CHART_TIMEFRAMES)[number];

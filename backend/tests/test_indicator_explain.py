@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from app.ai_engine.indicator_explain import explain_indicators
+from app.ai_engine.indicator_explain import explain_indicators, liquidity_score_reading
 from app.schemas.indicator import (
     BollingerBandsValues,
     EmaValues,
@@ -165,3 +165,32 @@ def test_explain_indicators_returns_thirteen_readings():
 
     assert len(readings) == 13
     assert len({r.name for r in readings}) == 13
+
+
+def test_liquidity_score_high_when_dollar_volume_is_large():
+    closes = np.full(20, 100.0)
+    volumes = np.full(20, 100_000.0)  # 100.0 * 100_000 = $10M/bar, well above the HIGH threshold
+
+    reading = liquidity_score_reading(closes, volumes)
+
+    assert reading.status == "HIGH"
+    assert reading.name == "Liquidity Score"
+
+
+def test_liquidity_score_low_when_dollar_volume_is_small():
+    closes = np.full(20, 100.0)
+    volumes = np.full(20, 10.0)  # 100.0 * 10 = $1,000/bar, well below the LOW threshold
+
+    reading = liquidity_score_reading(closes, volumes)
+
+    assert reading.status == "LOW"
+
+
+def test_liquidity_score_neutral_without_enough_candles():
+    closes = np.array([100.0])
+    volumes = np.array([10.0])
+
+    reading = liquidity_score_reading(closes, volumes)
+
+    assert reading.status == "NEUTRAL"
+    assert reading.value == "—"

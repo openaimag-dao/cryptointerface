@@ -62,6 +62,8 @@ class AssetOverviewOut(CamelModel):
     macd: IndicatorReadingOut
     ema_alignment: IndicatorReadingOut
     vwap: IndicatorReadingOut
+    volume_trend: IndicatorReadingOut
+    liquidity_score: IndicatorReadingOut
 
 
 class SmartMoneyConceptOut(CamelModel):

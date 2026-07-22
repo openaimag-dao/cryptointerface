@@ -22,6 +22,9 @@ ADX_RANGING = 20.0
 ATR_HIGH_VOL_PCT = 3.0
 ATR_LOW_VOL_PCT = 1.0
 OBV_TREND_LOOKBACK = 10
+LIQUIDITY_LOOKBACK = 20
+LIQUIDITY_HIGH_USD = 5_000_000.0
+LIQUIDITY_LOW_USD = 500_000.0
 
 
 @dataclass(frozen=True)
@@ -190,6 +193,34 @@ def _pivot_reading(pivot: float | None, price: float) -> IndicatorReading:
     verb = "above" if price > pivot else "below"
     return IndicatorReading(
         "Pivot Point", f"{pivot:.6g}", status, f"Price is trading {verb} the floor-trader pivot ({pivot:.6g})."
+    )
+
+
+def liquidity_score_reading(closes: np.ndarray, volumes: np.ndarray) -> IndicatorReading:
+    """No order-book/bid-ask depth data exists anywhere in this app, so
+    this is a dollar-volume proxy (average traded value per bar over the
+    recent window) rather than a true depth/spread-based liquidity
+    score — reported honestly as that, not as more precise than it is."""
+    if len(closes) < 2:
+        return IndicatorReading("Liquidity Score", "—", "NEUTRAL", "Not enough candle history yet.")
+
+    lookback = min(LIQUIDITY_LOOKBACK, len(closes))
+    dollar_volume = closes[-lookback:] * volumes[-lookback:]
+    avg_dollar_volume = float(np.mean(dollar_volume))
+
+    if avg_dollar_volume >= LIQUIDITY_HIGH_USD:
+        status = "HIGH"
+    elif avg_dollar_volume <= LIQUIDITY_LOW_USD:
+        status = "LOW"
+    else:
+        status = "MODERATE"
+
+    return IndicatorReading(
+        "Liquidity Score",
+        f"${avg_dollar_volume:,.0f}",
+        status,
+        f"Average traded value over the last {lookback} bars — a dollar-volume proxy for liquidity "
+        "(no order-book depth data available).",
     )
 
 

@@ -74,7 +74,7 @@ export function OverviewTab({ symbol, baseAsset }: OverviewTabProps) {
         <CardContent className="pt-0">
           {overviewLoading || !overview ? (
             <div className="space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => (
+              {Array.from({ length: 7 }).map((_, i) => (
                 <Skeleton key={i} className="h-10 w-full" />
               ))}
             </div>
@@ -93,6 +93,8 @@ export function OverviewTab({ symbol, baseAsset }: OverviewTabProps) {
               <SnapshotRow reading={overview.macd} />
               <SnapshotRow reading={overview.emaAlignment} />
               <SnapshotRow reading={overview.vwap} />
+              <SnapshotRow reading={overview.volumeTrend} />
+              <SnapshotRow reading={overview.liquidityScore} />
             </div>
           )}
         </CardContent>

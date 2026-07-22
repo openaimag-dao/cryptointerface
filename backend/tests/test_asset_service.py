@@ -106,6 +106,8 @@ async def test_get_overview_snapshot_returns_indicator_subset(db_session):
     assert overview.atr.name == "ATR (14)"
     assert overview.ema_alignment.name == "EMA Alignment"
     assert overview.vwap.name == "VWAP"
+    assert overview.volume_trend.name == "Volume Trend"
+    assert overview.liquidity_score.name == "Liquidity Score"
 
 
 @pytest.mark.asyncio

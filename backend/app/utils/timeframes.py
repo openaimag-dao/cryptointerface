@@ -5,6 +5,8 @@ TIMEFRAME_SECONDS: dict[str, int] = {
     "1h": 60 * 60,
     "4h": 4 * 60 * 60,
     "1d": 24 * 60 * 60,
+    "1w": 7 * 24 * 60 * 60,
+    "1M": 30 * 24 * 60 * 60,  # calendar-month approximation, same simplification used elsewhere in this app
 }
 
 
