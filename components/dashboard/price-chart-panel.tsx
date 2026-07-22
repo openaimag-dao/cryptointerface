@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { CHART_TIMEFRAMES, WATCHLIST_SYMBOLS, type ChartTimeframe } from "@/lib/constants";
+import { CHART_TIMEFRAMES, TIMEFRAME_LABELS, WATCHLIST_SYMBOLS, type ChartTimeframe } from "@/lib/constants";
 import { formatCurrency, formatPercent } from "@/lib/utils";
 import { useAsset, useCandles } from "@/hooks/use-market-data";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -52,7 +52,7 @@ export function PriceChartPanel({ symbol, onSymbolChange }: PriceChartPanelProps
           <TabsList>
             {CHART_TIMEFRAMES.map((tf) => (
               <TabsTrigger key={tf} value={tf}>
-                {tf.toUpperCase()}
+                {TIMEFRAME_LABELS[tf]}
               </TabsTrigger>
             ))}
           </TabsList>
