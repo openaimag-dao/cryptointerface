@@ -12,3 +12,4 @@ export * from "./sentiment";
 export * from "./llm";
 export * from "./dashboard-intelligence";
 export * from "./backtest";
+export * from "./asset";

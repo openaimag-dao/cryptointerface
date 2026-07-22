@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
     ai,
+    assets,
     backtesting,
     candles,
     chat,
@@ -154,6 +155,11 @@ app.include_router(dashboard_intelligence.router)
 # Sprint 3 Decision Engine bar by bar over historical candles, no
 # look-ahead. See backend/README.md's Backtesting Engine section.
 app.include_router(backtesting.router)
+
+# Sprint 8: Asset Intelligence Dashboard (app/services/asset_service.py) —
+# per-symbol research terminal, aggregates the existing engines above into
+# `/api/assets/{symbol}/*`. No new computation, see backend/README.md.
+app.include_router(assets.router)
 
 # Still mock (portfolio) — out of scope until a future sprint.
 app.include_router(portfolio.router)
