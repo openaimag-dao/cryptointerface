@@ -75,6 +75,62 @@ def strength_from_score(score: float) -> float:
 
 
 @dataclass(frozen=True)
+class MacroIndicatorReading:
+    """One macro indicator's latest value plus its % change since the
+    previous stored reading (`None` if there's no prior reading yet)."""
+
+    value: float
+    change_percent: float | None
+
+
+@dataclass(frozen=True)
+class MacroSnapshot:
+    """Latest macro-indicator readings, built by `market_context.py` from
+    `app/services/macro_repository.py` and consumed by
+    `scoring/macro.py::score_macro()`. Every field is optional — a feed
+    that hasn't been fetched yet (no API key configured, or the scheduler
+    hasn't run) simply leaves that field `None`, and `score_macro()`
+    treats a missing reading as "no opinion" rather than an error."""
+
+    dxy: MacroIndicatorReading | None = None
+    gold: MacroIndicatorReading | None = None
+    sp500: MacroIndicatorReading | None = None
+    nasdaq: MacroIndicatorReading | None = None
+    vix: MacroIndicatorReading | None = None
+    us10y: MacroIndicatorReading | None = None
+    fear_greed: MacroIndicatorReading | None = None
+    btc_dominance: MacroIndicatorReading | None = None
+
+
+@dataclass(frozen=True)
+class NewsSnapshot:
+    """Recent news relevant to one symbol, built by
+    `app/services/news_repository.py::get_news_snapshot_for_symbol()` and
+    consumed by `scoring/news.py::score_news()`. `avg_sentiment_score` is
+    already on the familiar 0-100 scale (BULLISH articles pull it toward
+    100, BEARISH toward 0), weighted by each article's `impact_score` —
+    a high-impact BEARISH story moves this further than a throwaway one."""
+
+    article_count: int
+    avg_sentiment_score: float
+    avg_impact: float
+
+
+@dataclass(frozen=True)
+class WhaleSnapshot:
+    """Recent large on-chain transfers relevant to one asset, built by
+    `app/services/whale_repository.py::get_whale_snapshot_for_symbol()`
+    and consumed by `scoring/whales.py::score_whales()`. Withdrawals from
+    known exchange wallets (`from_exchange_usd`) read as accumulation
+    (bullish); deposits into them (`to_exchange_usd`) read as distribution/
+    selling pressure (bearish) — see `app/intelligence/whales/classifier.py`."""
+
+    event_count: int
+    to_exchange_usd: float
+    from_exchange_usd: float
+
+
+@dataclass(frozen=True)
 class FactorScore:
     """One scoring module's read on the market: a 0-100 score, the
     direction that score implies, how strongly it's expressed, and the

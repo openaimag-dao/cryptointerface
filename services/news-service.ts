@@ -1,7 +1,10 @@
-import { getMockNews } from "@/lib/mock/news";
-import { mockDelay } from "@/lib/mock/delay";
+import { apiFetch } from "@/lib/api-client";
 import type { NewsItem } from "@/types";
 
 export async function fetchNews(): Promise<NewsItem[]> {
-  return mockDelay(getMockNews());
+  try {
+    return await apiFetch<NewsItem[]>("/api/news");
+  } catch {
+    return [];
+  }
 }

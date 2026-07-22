@@ -8,4 +8,8 @@ export * from "./chat";
 export * from "./whale";
 export * from "./liquidation";
 export * from "./macro";
+export * from "./sentiment";
+export * from "./llm";
+export * from "./dashboard-intelligence";
 export * from "./backtest";
+export * from "./asset";

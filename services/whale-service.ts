@@ -1,7 +1,10 @@
-import { getMockWhaleTransactions } from "@/lib/mock/whales";
-import { mockDelay } from "@/lib/mock/delay";
+import { apiFetch } from "@/lib/api-client";
 import type { WhaleTransaction } from "@/types";
 
 export async function fetchWhaleTransactions(): Promise<WhaleTransaction[]> {
-  return mockDelay(getMockWhaleTransactions());
+  try {
+    return await apiFetch<WhaleTransaction[]>("/api/whales/transactions");
+  } catch {
+    return [];
+  }
 }

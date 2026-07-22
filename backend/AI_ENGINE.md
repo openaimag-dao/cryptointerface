@@ -35,8 +35,8 @@ app/ai_engine/
     structure.py     pivot levels, swing support/resistance, breakout/breakdown
     funding.py       funding rate level + trend (contrarian at extremes)
     oi.py             open interest vs price divergence matrix
-    macro.py          Sprint 4 stub (BTC Dominance/DXY/Gold/S&P500/NASDAQ/VIX)
-    news.py           Sprint 4 stub (news/whale-wallet sentiment)
+    macro.py          real (Sprint 4): DXY/Gold/S&P500/NASDAQ/VIX/US10Y/Fear&Greed
+    news.py           real (Sprint 4): RSS ingestion + deterministic keyword classifier
 ```
 
 Every scoring module is a pure function: numpy arrays (or plain lists) in,
@@ -73,19 +73,20 @@ point budget for each module is documented in its own docstring — see
 
 ## 1. Market Score — `market_score.py`
 
-The Market Score is a fixed-weight sum of all nine factor scores:
+The Market Score is a fixed-weight sum of all ten factor scores:
 
 | Factor       | Weight | Why |
 |--------------|-------:|-----|
-| trend        | 0.22   | Most predictive, well-established technical factor |
-| momentum     | 0.18   | Confirms/leads trend |
-| structure    | 0.18   | Support/resistance and breakouts matter as much as trend |
-| oi           | 0.15   | Open interest confirms whether a move has real conviction |
-| volume       | 0.12   | Confirms participation behind a move |
-| funding      | 0.10   | Positioning/sentiment signal, contrarian at extremes |
+| trend        | 0.16   | Most predictive, well-established technical factor |
+| momentum     | 0.13   | Confirms/leads trend |
+| structure    | 0.14   | Support/resistance and breakouts matter as much as trend |
+| oi           | 0.12   | Open interest confirms whether a move has real conviction |
+| volume       | 0.09   | Confirms participation behind a move |
+| funding      | 0.08   | Positioning/sentiment signal, contrarian at extremes |
 | volatility   | 0.05   | Directionally ambiguous on its own — low weight by design |
-| macro        | 0.00   | Sprint 4 stub — zero weight until real data lands |
-| news         | 0.00   | Sprint 4 stub — zero weight until real data lands |
+| macro        | 0.09   | Real as of Sprint 4 — DXY/Gold/S&P500/NASDAQ/VIX/US10Y/Fear&Greed, see `scoring/macro.py` |
+| news         | 0.08   | Real as of Sprint 4 — RSS ingestion + deterministic classifier, see `scoring/news.py` |
+| whales       | 0.06   | Real as of Sprint 4 — Etherscan-tracked exchange-wallet transfers (ETH/LINK only), see `scoring/whales.py` |
 
 ```
 market_score = clamp( sum(factor.score * weight for each factor) )
@@ -94,9 +95,15 @@ market_direction = direction_from_score(market_score)
 
 Weights are hardcoded constants (`FACTOR_WEIGHTS` in `market_score.py`),
 not learned or tuned by any statistical process — that's what makes the
-aggregate as reproducible and auditable as each individual factor. Wiring
-real macro/news data in a later sprint only requires raising their weight
-here (and rebalancing the others down); nothing else in the engine changes.
+aggregate as reproducible and auditable as each individual factor. `macro`
+and `news` moved off `0.00` in Sprint 4 exactly the way this section
+originally described: each stub's body was replaced (they now read
+`MarketContext.macro_snapshot`/`news_snapshot`, populated by
+`app/intelligence/` — see `backend/README.md`'s "Intelligence Layer"
+section). `whales` is a genuinely new factor (Sprint 3 had no stub for
+it) added following the exact same `FactorScore` contract as every other
+factor. Every other technical factor gave up a small slice of weight to
+fund the three; nothing else in the engine changed.
 
 ## 2. Confidence Engine — `confidence_engine.py`
 
@@ -215,18 +222,31 @@ bit-identical output — this is asserted directly in
 and in the equivalent determinism test for every individual scoring
 module.
 
-## What Sprint 4 adds
+## What Sprint 4 added
 
-- **`macro.py`**: real BTC Dominance / DXY / Gold / S&P 500 / NASDAQ / VIX
-  feeds, replacing the neutral stub. Only requires implementing the body
-  of `score_macro()` and raising its weight in `FACTOR_WEIGHTS` — every
-  other file in the engine is already shaped to consume a real
-  `FactorScore` from it.
-- **`news.py`**: real news/sentiment ingestion, same pattern.
-- **Whale-wallet analysis**: a new scoring module following the exact same
-  `FactorScore` contract, plugged into `market_score.py`'s weight table.
-- **LLM-based explanation layer**: a new component that takes an already-
-  computed `AIDecision` (score, confidence, direction, reasons, risk) and
-  turns it into narrative prose for the chat/dashboard UI. It reads this
-  engine's output — it never feeds back into it, so the underlying
-  analysis stays deterministic regardless of what the LLM does.
+- **`macro.py`** — done: real DXY / Gold / S&P 500 / NASDAQ / VIX / US 10Y
+  / Fear & Greed feeds (`app/intelligence/macro/`), replacing the neutral
+  stub, with `FACTOR_WEIGHTS["macro"]` raised from `0.00` to `0.09`. BTC
+  Dominance, Silver, and Oil are fetched/displayed (`/api/macro/indicators`)
+  but intentionally not scored — see that module's docstring.
+- **`news.py`** — done: real RSS ingestion + a deterministic keyword
+  classifier (`app/intelligence/news/`, no LLM call per article — see
+  that module's docstring for why), replacing the neutral stub, with
+  `FACTOR_WEIGHTS["news"]` raised from `0.00` to `0.08`.
+- **`whales.py`** — done: real Etherscan-tracked transfers touching known
+  exchange wallets (`app/intelligence/whales/`), classified
+  deterministically as deposits/withdrawals. A genuinely new module
+  (Sprint 3 had no stub to replace), wired into `FACTOR_WEIGHTS["whales"]`
+  at `0.06`. Coverage is limited to ETH/LINK (assets with an Ethereum
+  footprint) — see that module's docstring.
+- **Sentiment Engine** (`app/intelligence/sentiment/`) — done: a layer
+  *above* this engine that blends Technical (this engine's own Market
+  Score/Confidence) with real Macro, real Liquidations, real News, and
+  real Whales into one overall read for `/api/sentiment` and the
+  Dashboard's Intelligence Card. It never feeds back into
+  `market_score.py`.
+- **LLM Explanation Layer** (`app/intelligence/llm/`) — done: takes an
+  already-computed `AIDecision` + Sentiment breakdown and turns it into
+  narrative prose via forced Claude tool-use (`/api/llm/explanation/{symbol}`).
+  `direction`/`confidence` are copied from the engine, never set by the
+  model — it reads this engine's output, never feeds back into it.

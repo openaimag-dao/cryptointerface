@@ -6,17 +6,21 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
     ai,
+    assets,
     backtesting,
     candles,
     chat,
+    dashboard_intelligence,
     funding,
     indicators,
     liquidations,
+    llm,
     macro,
     market,
     news,
     open_interest,
     portfolio,
+    sentiment,
     signals,
     status,
     websocket,
@@ -27,6 +31,13 @@ from app.core.engine_state import engine_state
 from app.core.logging import configure_logging, get_logger
 from app.core.redis import close_redis
 from app.database.session import AsyncSessionLocal, dispose_engine, init_models
+from app.intelligence.scheduler.tasks import (
+    run_llm_explanation_refresh,
+    run_macro_poller,
+    run_news_poller,
+    run_sentiment_recompute,
+    run_whale_poller,
+)
 from app.services.binance.ws_client import ConnectionState
 from app.services.websocket.manager import connection_manager
 from app.tasks.coingecko_fallback import run_coingecko_fallback_poller
@@ -66,6 +77,12 @@ async def lifespan(app: FastAPI):
             run_coingecko_fallback_poller(broadcast=connection_manager.broadcast, stop_event=_stop_event)
         )
     )
+    # Sprint 4: Intelligence Layer schedulers (app/intelligence/scheduler/).
+    _background_tasks.append(asyncio.create_task(run_macro_poller(stop_event=_stop_event)))
+    _background_tasks.append(asyncio.create_task(run_news_poller(stop_event=_stop_event)))
+    _background_tasks.append(asyncio.create_task(run_whale_poller(stop_event=_stop_event)))
+    _background_tasks.append(asyncio.create_task(run_sentiment_recompute(stop_event=_stop_event)))
+    _background_tasks.append(asyncio.create_task(run_llm_explanation_refresh(stop_event=_stop_event)))
 
     yield
 
@@ -83,9 +100,11 @@ app = FastAPI(
     title="AIMAG AI Terminal API",
     description="Backend for the AIMAG AI trading terminal: a real-time Binance-backed Data "
     "Engine (REST + WebSocket ingestion, indicators, Postgres/Redis storage) feeding a "
-    "deterministic AI Decision Engine (no LLM, no trade execution — see AI_ENGINE.md) and a "
-    "Claude-backed AI Chat assistant. Portfolio/news/whales/macro/backtesting still serve "
-    "mock data pending a future sprint.",
+    "deterministic AI Decision Engine (no LLM, no trade execution — see AI_ENGINE.md), a Sprint 4 "
+    "Intelligence Layer (macro/news/whales/sentiment/LLM-explanation, see app/intelligence/), a "
+    "Claude-backed AI Chat assistant, and a Sprint 5 Backtesting Engine that replays the "
+    "unmodified Decision Engine bar by bar with no look-ahead (see app/backtesting/). "
+    "Portfolio still serves mock data pending a future sprint.",
     version="0.2.0",
     lifespan=lifespan,
 )
@@ -119,13 +138,31 @@ app.include_router(signals.router)
 app.include_router(liquidations.router)
 app.include_router(chat.router)
 
-# Still mock (portfolio, news, whales, macro, backtesting) — out of scope
-# until a future sprint.
-app.include_router(portfolio.router)
+# Sprint 4: Intelligence Layer (app/intelligence/) — macro.router's
+# /indicators is real (/events is still a mock economic calendar);
+# news.router is real (RSS + deterministic classifier, no LLM per
+# article); whales.router is real (Etherscan-tracked transfers touching
+# known exchange wallets, classified deterministically); sentiment/llm/
+# dashboard_intelligence are entirely new and real.
+app.include_router(macro.router)
 app.include_router(news.router)
 app.include_router(whales.router)
-app.include_router(macro.router)
+app.include_router(sentiment.router)
+app.include_router(llm.router)
+app.include_router(dashboard_intelligence.router)
+
+# Sprint 5: Backtesting Engine (app/backtesting/) — replays the unmodified
+# Sprint 3 Decision Engine bar by bar over historical candles, no
+# look-ahead. See backend/README.md's Backtesting Engine section.
 app.include_router(backtesting.router)
+
+# Sprint 8: Asset Intelligence Dashboard (app/services/asset_service.py) —
+# per-symbol research terminal, aggregates the existing engines above into
+# `/api/assets/{symbol}/*`. No new computation, see backend/README.md.
+app.include_router(assets.router)
+
+# Still mock (portfolio) — out of scope until a future sprint.
+app.include_router(portfolio.router)
 
 
 @app.get("/api/health", tags=["health"])

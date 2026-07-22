@@ -10,6 +10,8 @@ from app.ai_engine.scoring.oi import score_oi
 from app.ai_engine.scoring.structure import score_structure
 from app.ai_engine.scoring.volatility import score_volatility
 from app.ai_engine.scoring.volume import score_volume
+from app.ai_engine.scoring.whales import score_whales
+from app.ai_engine.types import MacroIndicatorReading, MacroSnapshot, NewsSnapshot, WhaleSnapshot
 
 
 def _uptrend(n: int = 300) -> np.ndarray:
@@ -123,17 +125,150 @@ def test_oi_insufficient_history_is_neutral():
     assert factor.direction == "WAIT"
 
 
-def test_macro_stub_is_neutral_and_labeled_as_stub():
-    factor = score_macro()
+def test_macro_no_snapshot_is_neutral_and_labeled_as_stub():
+    factor = score_macro(None)
 
     assert factor.score == 50.0
     assert factor.direction == "WAIT"
     assert factor.details["stub"] is True
 
 
-def test_news_stub_is_neutral_and_labeled_as_stub():
-    factor = score_news()
+def test_macro_bullish_snapshot_scores_above_neutral():
+    snapshot = MacroSnapshot(
+        dxy=MacroIndicatorReading(value=25.0, change_percent=-1.5),  # weaker dollar -> bullish
+        nasdaq=MacroIndicatorReading(value=400.0, change_percent=2.0),  # risk-on -> bullish
+        fear_greed=MacroIndicatorReading(value=80.0, change_percent=None),  # greed -> bullish
+    )
+    factor = score_macro(snapshot)
+
+    assert factor.score > 50.0
+    assert factor.direction in ("LONG", "WAIT")
+    assert any("NASDAQ" in reason for reason in factor.reasons)
+    assert any("DXY" in reason for reason in factor.reasons)
+
+
+def test_macro_bearish_snapshot_scores_below_neutral():
+    snapshot = MacroSnapshot(
+        dxy=MacroIndicatorReading(value=25.0, change_percent=1.5),  # stronger dollar -> bearish
+        nasdaq=MacroIndicatorReading(value=400.0, change_percent=-2.0),  # risk-off -> bearish
+        vix=MacroIndicatorReading(value=15.0, change_percent=10.0),  # fear spiking -> bearish
+        fear_greed=MacroIndicatorReading(value=15.0, change_percent=None),  # fear -> bearish
+    )
+    factor = score_macro(snapshot)
+
+    assert factor.score < 50.0
+    assert factor.direction in ("SHORT", "WAIT")
+
+
+def test_macro_snapshot_with_no_moving_readings_stays_neutral():
+    snapshot = MacroSnapshot(dxy=MacroIndicatorReading(value=25.0, change_percent=0.0))
+    factor = score_macro(snapshot)
+
+    assert factor.score == 50.0
+
+
+def test_macro_deterministic_same_input_same_output():
+    snapshot = MacroSnapshot(nasdaq=MacroIndicatorReading(value=400.0, change_percent=1.2))
+    first = score_macro(snapshot)
+    second = score_macro(snapshot)
+
+    assert first.score == second.score
+    assert first.reasons == second.reasons
+
+
+def test_news_no_snapshot_is_neutral_and_labeled_as_stub():
+    factor = score_news(None)
 
     assert factor.score == 50.0
     assert factor.direction == "WAIT"
-    assert factor.details["stub"] is True
+
+
+def test_news_zero_articles_is_neutral():
+    factor = score_news(NewsSnapshot(article_count=0, avg_sentiment_score=50.0, avg_impact=0.0))
+
+    assert factor.score == 50.0
+
+
+def test_news_bullish_snapshot_scores_above_neutral():
+    snapshot = NewsSnapshot(article_count=5, avg_sentiment_score=90.0, avg_impact=80.0)
+    factor = score_news(snapshot)
+
+    assert factor.score > 50.0
+    assert factor.direction in ("LONG", "WAIT")
+
+
+def test_news_bearish_snapshot_scores_below_neutral():
+    snapshot = NewsSnapshot(article_count=5, avg_sentiment_score=10.0, avg_impact=80.0)
+    factor = score_news(snapshot)
+
+    assert factor.score < 50.0
+    assert factor.direction in ("SHORT", "WAIT")
+
+
+def test_news_low_confidence_snapshot_stays_close_to_neutral():
+    """Few articles / low impact shouldn't swing the score as hard as a
+    high-confidence read with the same avg_sentiment_score."""
+    low_confidence = NewsSnapshot(article_count=1, avg_sentiment_score=95.0, avg_impact=10.0)
+    high_confidence = NewsSnapshot(article_count=5, avg_sentiment_score=95.0, avg_impact=90.0)
+
+    low_factor = score_news(low_confidence)
+    high_factor = score_news(high_confidence)
+
+    assert abs(low_factor.score - 50.0) < abs(high_factor.score - 50.0)
+
+
+def test_news_deterministic_same_input_same_output():
+    snapshot = NewsSnapshot(article_count=3, avg_sentiment_score=70.0, avg_impact=60.0)
+    first = score_news(snapshot)
+    second = score_news(snapshot)
+
+    assert first.score == second.score
+    assert first.reasons == second.reasons
+
+
+def test_whales_no_snapshot_is_neutral():
+    factor = score_whales(None)
+
+    assert factor.score == 50.0
+    assert factor.direction == "WAIT"
+
+
+def test_whales_zero_events_is_neutral():
+    factor = score_whales(WhaleSnapshot(event_count=0, to_exchange_usd=0.0, from_exchange_usd=0.0))
+
+    assert factor.score == 50.0
+
+
+def test_whales_thin_activity_stays_neutral():
+    snapshot = WhaleSnapshot(event_count=1, to_exchange_usd=50_000.0, from_exchange_usd=0.0)
+    factor = score_whales(snapshot)
+
+    assert factor.score == 50.0
+    assert any("too thin" in reason for reason in factor.reasons)
+
+
+def test_whales_heavy_withdrawals_score_above_neutral():
+    snapshot = WhaleSnapshot(event_count=4, to_exchange_usd=200_000.0, from_exchange_usd=1_800_000.0)
+    factor = score_whales(snapshot)
+
+    assert factor.score > 50.0
+    assert factor.direction in ("LONG", "WAIT")
+    assert any("accumulation" in reason for reason in factor.reasons)
+
+
+def test_whales_heavy_deposits_score_below_neutral():
+    snapshot = WhaleSnapshot(event_count=4, to_exchange_usd=1_800_000.0, from_exchange_usd=200_000.0)
+    factor = score_whales(snapshot)
+
+    assert factor.score < 50.0
+    assert factor.direction in ("SHORT", "WAIT")
+    assert any("distribution" in reason for reason in factor.reasons)
+
+
+def test_whales_deterministic_same_input_same_output():
+    snapshot = WhaleSnapshot(event_count=3, to_exchange_usd=600_000.0, from_exchange_usd=400_000.0)
+    first = score_whales(snapshot)
+    second = score_whales(snapshot)
+
+    assert first.score == second.score
+    assert first.reasons == second.reasons

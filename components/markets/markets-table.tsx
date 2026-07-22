@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 
 import { cn, formatCompactNumber, formatCurrency, formatPercent } from "@/lib/utils";
@@ -106,10 +107,13 @@ export function MarketsTable() {
               : sortedAssets.map((asset) => (
                   <TableRow key={asset.symbol}>
                     <TableCell className="font-medium text-foreground">
-                      <div className="flex flex-col">
+                      <Link
+                        href={`/assets/${asset.symbol.replace(/USDT$/, "")}`}
+                        className="flex flex-col hover:text-accent"
+                      >
                         <span>{asset.symbol}</span>
                         <span className="text-xs font-normal text-muted-foreground">{asset.name}</span>
-                      </div>
+                      </Link>
                     </TableCell>
                     <TableCell className="text-right">{formatCurrency(asset.price)}</TableCell>
                     <TableCell

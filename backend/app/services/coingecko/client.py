@@ -35,6 +35,13 @@ class MarketSnapshot:
     low_24h: float
     change_percent_24h: float
     volume_24h: float
+    # Only populated by get_markets() when `include_extended=True` (the
+    # Asset Intelligence Dashboard's top bar, see app/services/asset_service.py) —
+    # the Binance-fallback ticker poller doesn't need these and stays on
+    # the cheaper default request shape.
+    market_cap: float | None = None
+    change_percent_7d: float | None = None
+    change_percent_30d: float | None = None
 
 
 @dataclass(frozen=True)
@@ -87,14 +94,18 @@ class CoinGeckoRestClient:
             logger.warning("coingecko_ping_failed", extra={"error": str(exc)})
             return False
 
-    async def get_markets(self, coin_ids: list[str]) -> dict[str, MarketSnapshot]:
-        """One REST call, current price + 24h stats for every requested coin."""
+    async def get_markets(self, coin_ids: list[str], include_extended: bool = False) -> dict[str, MarketSnapshot]:
+        """One REST call, current price + 24h stats for every requested coin.
+        `include_extended=True` also requests market cap and 7d/30d change —
+        the Binance-fallback ticker poller doesn't need those, only the
+        Asset Intelligence Dashboard's top bar does (see `asset_service.py`)."""
         if not coin_ids:
             return {}
 
+        change_windows = "24h,7d,30d" if include_extended else "24h"
         raw = await self._get(
             "/coins/markets",
-            params={"vs_currency": "usd", "ids": ",".join(coin_ids), "price_change_percentage": "24h"},
+            params={"vs_currency": "usd", "ids": ",".join(coin_ids), "price_change_percentage": change_windows},
         )
         assert isinstance(raw, list)
 
@@ -104,6 +115,9 @@ class CoinGeckoRestClient:
             price = row.get("current_price")
             if coin_id is None or price is None:
                 continue
+            market_cap = row.get("market_cap")
+            change_7d = row.get("price_change_percentage_7d_in_currency")
+            change_30d = row.get("price_change_percentage_30d_in_currency")
             result[coin_id] = MarketSnapshot(
                 coin_id=coin_id,
                 price=float(price),
@@ -111,8 +125,22 @@ class CoinGeckoRestClient:
                 low_24h=float(row.get("low_24h") or price),
                 change_percent_24h=float(row.get("price_change_percentage_24h") or 0.0),
                 volume_24h=float(row.get("total_volume") or 0.0),
+                market_cap=float(market_cap) if market_cap is not None else None,
+                change_percent_7d=float(change_7d) if change_7d is not None else None,
+                change_percent_30d=float(change_30d) if change_30d is not None else None,
             )
         return result
+
+    async def get_global_data(self) -> float | None:
+        """BTC's share of total crypto market cap (0-100), used by the
+        Macro Engine (`app/intelligence/macro/`) — unrelated to the
+        Binance-fallback role of the rest of this client, but the same
+        free/keyless endpoint family so it lives here rather than a
+        second client."""
+        raw = await self._get("/global")
+        assert isinstance(raw, dict)
+        btc_pct = raw.get("data", {}).get("market_cap_percentage", {}).get("btc")
+        return float(btc_pct) if btc_pct is not None else None
 
     async def get_ohlc(self, coin_id: str, days: int) -> list[OhlcCandle]:
         """Free-tier granularity is fixed by `days`, not independently

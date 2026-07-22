@@ -58,6 +58,52 @@ async def test_get_markets_empty_input_makes_no_request():
 
 
 @pytest.mark.asyncio
+async def test_get_markets_default_omits_extended_fields():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["price_change_percentage"] == "24h"
+        return httpx.Response(200, json=[_market_row("bitcoin", 65000.0)])
+
+    client = CoinGeckoRestClient()
+    client._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://api.coingecko.com/api/v3"
+    )
+
+    try:
+        markets = await client.get_markets(["bitcoin"])
+    finally:
+        await client.close()
+
+    assert markets["bitcoin"].market_cap is None
+    assert markets["bitcoin"].change_percent_7d is None
+    assert markets["bitcoin"].change_percent_30d is None
+
+
+@pytest.mark.asyncio
+async def test_get_markets_extended_parses_market_cap_and_7d_30d():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["price_change_percentage"] == "24h,7d,30d"
+        row = _market_row("bitcoin", 65000.0)
+        row["market_cap"] = 1_300_000_000_000.0
+        row["price_change_percentage_7d_in_currency"] = 3.4
+        row["price_change_percentage_30d_in_currency"] = -2.1
+        return httpx.Response(200, json=[row])
+
+    client = CoinGeckoRestClient()
+    client._client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="https://api.coingecko.com/api/v3"
+    )
+
+    try:
+        markets = await client.get_markets(["bitcoin"], include_extended=True)
+    finally:
+        await client.close()
+
+    assert markets["bitcoin"].market_cap == 1_300_000_000_000.0
+    assert markets["bitcoin"].change_percent_7d == 3.4
+    assert markets["bitcoin"].change_percent_30d == -2.1
+
+
+@pytest.mark.asyncio
 async def test_get_ohlc_parses_rows():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=[[1_700_000_000_000, 100.0, 101.0, 99.0, 100.5]])

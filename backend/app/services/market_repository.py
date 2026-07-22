@@ -127,13 +127,19 @@ async def bulk_upsert_candles(db: AsyncSession, symbol: str, interval: str, klin
         await db.commit()
 
 
-async def get_recent_candles(db: AsyncSession, symbol: str, interval: str, limit: int = 500) -> list[Candle]:
-    stmt = (
-        select(Candle)
-        .where(Candle.symbol == symbol, Candle.interval == interval)
-        .order_by(Candle.open_time.desc())
-        .limit(limit)
-    )
+async def get_recent_candles(
+    db: AsyncSession, symbol: str, interval: str, limit: int = 500, as_of: int | None = None
+) -> list[Candle]:
+    """The most recent `limit` candles, ascending. `as_of` (unix seconds,
+    inclusive) restricts this to candles that had already closed by that
+    point in time — used by the Backtesting Engine's bulk history fetch
+    (`app/backtesting/strategy_runner.py`) so a single query can pull
+    exactly the window a historical bar would have seen, with nothing
+    from after it. Real-time callers never pass it (defaults to "now")."""
+    stmt = select(Candle).where(Candle.symbol == symbol, Candle.interval == interval)
+    if as_of is not None:
+        stmt = stmt.where(Candle.open_time <= as_of)
+    stmt = stmt.order_by(Candle.open_time.desc()).limit(limit)
     result = await db.execute(stmt)
     candles = list(result.scalars().all())
     candles.reverse()  # ascending (oldest -> newest)
@@ -144,6 +150,21 @@ async def count_candles(db: AsyncSession, symbol: str, interval: str) -> int:
     stmt = select(Candle.id).where(Candle.symbol == symbol, Candle.interval == interval)
     result = await db.execute(stmt)
     return len(result.all())
+
+
+async def get_candle_time_bounds(db: AsyncSession, symbol: str, interval: str) -> tuple[int, int] | None:
+    """(earliest, latest) `open_time` on file for this symbol/interval, or
+    None if there's no history at all yet. Used by the Backtesting Engine
+    to tell "insufficient data" apart from "no data" and to report exactly
+    how much history is actually available (see `backtesting/engine.py`)."""
+    stmt = select(func.min(Candle.open_time), func.max(Candle.open_time)).where(
+        Candle.symbol == symbol, Candle.interval == interval
+    )
+    result = await db.execute(stmt)
+    earliest, latest = result.one()
+    if earliest is None or latest is None:
+        return None
+    return int(earliest), int(latest)
 
 
 async def upsert_market_stat(
@@ -213,11 +234,16 @@ async def get_latest_funding(db: AsyncSession, symbol: str) -> FundingRate | Non
     return result.scalar_one_or_none()
 
 
-async def get_recent_funding_history(db: AsyncSession, symbol: str, limit: int = 20) -> list[FundingRate]:
-    """Most recent `limit` funding readings, ascending (oldest -> newest)."""
-    stmt = (
-        select(FundingRate).where(FundingRate.symbol == symbol).order_by(FundingRate.funding_time.desc()).limit(limit)
-    )
+async def get_recent_funding_history(
+    db: AsyncSession, symbol: str, limit: int = 20, as_of: int | None = None
+) -> list[FundingRate]:
+    """Most recent `limit` funding readings, ascending (oldest -> newest).
+    `as_of` (unix seconds, inclusive) is the same backtest-only cutoff
+    `get_recent_candles` supports — see its docstring."""
+    stmt = select(FundingRate).where(FundingRate.symbol == symbol)
+    if as_of is not None:
+        stmt = stmt.where(FundingRate.funding_time <= as_of)
+    stmt = stmt.order_by(FundingRate.funding_time.desc()).limit(limit)
     result = await db.execute(stmt)
     rows = list(result.scalars().all())
     rows.reverse()
@@ -247,11 +273,16 @@ async def get_latest_open_interest(db: AsyncSession, symbol: str) -> OpenInteres
     return result.scalar_one_or_none()
 
 
-async def get_recent_open_interest_history(db: AsyncSession, symbol: str, limit: int = 20) -> list[OpenInterest]:
-    """Most recent `limit` open-interest polls, ascending (oldest -> newest)."""
-    stmt = (
-        select(OpenInterest).where(OpenInterest.symbol == symbol).order_by(OpenInterest.timestamp.desc()).limit(limit)
-    )
+async def get_recent_open_interest_history(
+    db: AsyncSession, symbol: str, limit: int = 20, as_of: int | None = None
+) -> list[OpenInterest]:
+    """Most recent `limit` open-interest polls, ascending (oldest -> newest).
+    `as_of` (unix seconds, inclusive) is the same backtest-only cutoff
+    `get_recent_candles` supports — see its docstring."""
+    stmt = select(OpenInterest).where(OpenInterest.symbol == symbol)
+    if as_of is not None:
+        stmt = stmt.where(OpenInterest.timestamp <= as_of)
+    stmt = stmt.order_by(OpenInterest.timestamp.desc()).limit(limit)
     result = await db.execute(stmt)
     rows = list(result.scalars().all())
     rows.reverse()

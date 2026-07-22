@@ -10,6 +10,9 @@ websockets==13.1
 # deterministic/no-LLM, see AI_ENGINE.md)
 anthropic==0.69.0
 
+# News Engine (RSS parsing — app/intelligence/news/)
+feedparser==6.0.11
+
 # Data engine
 sqlalchemy==2.0.35
 asyncpg==0.29.0
@@ -19,4 +22,5 @@ numpy==1.26.4
 # Dev / test
 pytest==8.3.3
 pytest-asyncio==0.24.0
+pytest-cov==5.0.0
 ruff==0.7.0
