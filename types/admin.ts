@@ -33,3 +33,41 @@ export interface AdminNewsUpdateRequest {
   portalTopic?: string;
   editorialStatus?: EditorialStatus;
 }
+
+export interface AdminSource {
+  id: string;
+  sourceKey: string;
+  name: string;
+  rssUrl: string;
+  language: string;
+  defaultTopic: string;
+  trustScore: number;
+  enabled: boolean;
+  autoPublish: boolean;
+  lastFetchedAt: string | null;
+  lastStatus: string | null;
+  lastError: string | null;
+  articlesImportedCount: number;
+}
+
+export interface AdminSourceUpdateRequest {
+  name?: string;
+  rssUrl?: string;
+  language?: string;
+  defaultTopic?: string;
+  trustScore?: number;
+  enabled?: boolean;
+  autoPublish?: boolean;
+}
+
+export interface AdminFetchLog {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  status: string;
+  articlesFound: number;
+  articlesNew: number;
+  errorMessage: string | null;
+  durationMs: number;
+  createdAt: string;
+}

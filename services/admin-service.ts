@@ -1,4 +1,13 @@
-import type { AdminNewsPage, AdminNewsUpdateRequest, EditorialStatus, EditorialStatusCounts, NewsItem } from "@/types";
+import type {
+  AdminFetchLog,
+  AdminNewsPage,
+  AdminNewsUpdateRequest,
+  AdminSource,
+  AdminSourceUpdateRequest,
+  EditorialStatus,
+  EditorialStatusCounts,
+  NewsItem,
+} from "@/types";
 
 export async function fetchAdminNews(status: EditorialStatus, limit = 20, offset = 0): Promise<AdminNewsPage> {
   const params = new URLSearchParams({ status, limit: String(limit), offset: String(offset) });
@@ -21,5 +30,30 @@ export async function updateAdminNews(articleId: string, payload: AdminNewsUpdat
     body: JSON.stringify(payload),
   });
   if (!response.ok) return null;
+  return response.json();
+}
+
+export async function fetchAdminSources(): Promise<AdminSource[]> {
+  const response = await fetch("/api/admin/sources", { cache: "no-store" });
+  if (!response.ok) return [];
+  return response.json();
+}
+
+export async function updateAdminSource(
+  sourceId: string,
+  payload: AdminSourceUpdateRequest,
+): Promise<AdminSource | null> {
+  const response = await fetch(`/api/admin/sources/${sourceId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) return null;
+  return response.json();
+}
+
+export async function fetchAdminFetchLogs(limit = 50): Promise<AdminFetchLog[]> {
+  const response = await fetch(`/api/admin/fetch-logs?limit=${limit}`, { cache: "no-store" });
+  if (!response.ok) return [];
   return response.json();
 }

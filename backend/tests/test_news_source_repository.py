@@ -5,9 +5,11 @@ from app.models.news_source import NewsSource
 from app.services.news_source_repository import (
     get_all_sources,
     get_enabled_sources,
+    get_recent_fetch_logs,
     get_source_by_id,
     record_fetch_result,
     seed_default_sources,
+    update_source,
 )
 
 
@@ -113,3 +115,60 @@ async def test_record_fetch_result_records_error(db_session):
     refreshed = await get_source_by_id(db_session, source.id)
     assert refreshed.last_status == "ERROR"
     assert refreshed.last_error == "timeout"
+
+
+@pytest.mark.asyncio
+async def test_update_source_applies_editable_fields(db_session):
+    source = NewsSource(source_key="upd-src", name="Old Name", rss_url="https://example.com/old")
+    db_session.add(source)
+    await db_session.commit()
+
+    updated = await update_source(db_session, source, {"name": "New Name", "enabled": False, "trust_score": 42.0})
+
+    assert updated.name == "New Name"
+    assert updated.enabled is False
+    assert updated.trust_score == 42.0
+
+
+@pytest.mark.asyncio
+async def test_update_source_ignores_none_values_and_unknown_keys(db_session):
+    source = NewsSource(source_key="upd-src-2", name="Keep Me", rss_url="https://example.com/keep")
+    db_session.add(source)
+    await db_session.commit()
+
+    updated = await update_source(db_session, source, {"name": None, "source_key": "hijacked"})
+
+    assert updated.name == "Keep Me"
+    assert updated.source_key == "upd-src-2"
+
+
+@pytest.mark.asyncio
+async def test_get_recent_fetch_logs_returns_newest_first(db_session):
+    source = NewsSource(source_key="log-src", name="Log Source", rss_url="https://example.com/log")
+    db_session.add(source)
+    await db_session.commit()
+
+    await record_fetch_result(db_session, source, status="SUCCESS", articles_found=1, articles_new=1, duration_ms=10)
+    await record_fetch_result(db_session, source, status="ERROR", articles_found=0, articles_new=0, duration_ms=5)
+
+    logs = await get_recent_fetch_logs(db_session)
+
+    assert len(logs) == 2
+    assert logs[0].status == "ERROR"
+    assert logs[1].status == "SUCCESS"
+
+
+@pytest.mark.asyncio
+async def test_get_recent_fetch_logs_filters_by_source(db_session):
+    source_a = NewsSource(source_key="log-a", name="A", rss_url="https://example.com/a")
+    source_b = NewsSource(source_key="log-b", name="B", rss_url="https://example.com/b")
+    db_session.add_all([source_a, source_b])
+    await db_session.commit()
+
+    await record_fetch_result(db_session, source_a, status="SUCCESS", articles_found=1, articles_new=1, duration_ms=1)
+    await record_fetch_result(db_session, source_b, status="SUCCESS", articles_found=1, articles_new=1, duration_ms=1)
+
+    logs = await get_recent_fetch_logs(db_session, source_id=source_a.id)
+
+    assert len(logs) == 1
+    assert logs[0].source_id == source_a.id

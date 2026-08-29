@@ -8,8 +8,10 @@ from sqlalchemy import select
 from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
 from app.database.session import get_db
+from app.models.news_source import NewsSource
 from app.models.user import User
 from app.services.news_repository import insert_article
+from app.services.news_source_repository import record_fetch_result
 
 
 def _app(db_session):
@@ -193,3 +195,82 @@ async def test_admin_update_404_for_unknown_article(db_session):
         )
 
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_sources_requires_auth(db_session):
+    async with await _client(db_session) as client:
+        response = await client.get("/api/admin/sources")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_admin_can_list_sources(db_session):
+    source = NewsSource(source_key="src-a", name="Source A", rss_url="https://example.com/a")
+    db_session.add(source)
+    await db_session.commit()
+
+    async with await _client(db_session) as client:
+        token = await _register_and_get_token(client, "admin9@example.com")
+        await _promote_to_admin(db_session, "admin9@example.com")
+        response = await client.get("/api/admin/sources", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["sourceKey"] == "src-a"
+    assert body[0]["enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_admin_can_toggle_a_source(db_session):
+    source = NewsSource(source_key="src-b", name="Source B", rss_url="https://example.com/b")
+    db_session.add(source)
+    await db_session.commit()
+    source_id = source.id
+
+    async with await _client(db_session) as client:
+        token = await _register_and_get_token(client, "admin10@example.com")
+        await _promote_to_admin(db_session, "admin10@example.com")
+        response = await client.patch(
+            f"/api/admin/sources/{source_id}",
+            json={"enabled": False, "autoPublish": False},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["enabled"] is False
+    assert body["autoPublish"] is False
+
+
+@pytest.mark.asyncio
+async def test_admin_update_source_404_for_unknown_source(db_session):
+    async with await _client(db_session) as client:
+        token = await _register_and_get_token(client, "admin11@example.com")
+        await _promote_to_admin(db_session, "admin11@example.com")
+        response = await client.patch(
+            "/api/admin/sources/999999", json={"enabled": False}, headers={"Authorization": f"Bearer {token}"}
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_can_list_fetch_logs(db_session):
+    source = NewsSource(source_key="src-c", name="Source C", rss_url="https://example.com/c")
+    db_session.add(source)
+    await db_session.commit()
+    await record_fetch_result(db_session, source, status="ERROR", articles_found=0, articles_new=0, duration_ms=5)
+
+    async with await _client(db_session) as client:
+        token = await _register_and_get_token(client, "admin12@example.com")
+        await _promote_to_admin(db_session, "admin12@example.com")
+        response = await client.get("/api/admin/fetch-logs", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["sourceName"] == "Source C"
+    assert body[0]["status"] == "ERROR"

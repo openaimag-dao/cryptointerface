@@ -637,6 +637,38 @@ CryptoSlate's real feeds), but a source that genuinely doesn't include one
 just leaves this null, and the frontend renders a text-only card in that
 case (`components/portal/news-card.tsx`).
 
+## News Platform: source management + ingestion monitoring + multilingual readiness
+
+`GET /api/admin/sources` / `PATCH /api/admin/sources/{id}` — the
+DB-backed source registry (`app/models/news_source.py`, seeded once from
+`app/intelligence/news/sources.py::NEWS_SOURCES`) is now admin-editable:
+toggling `enabled` or `auto_publish`, or adjusting `trust_score`/
+`language`/`default_topic`/`rss_url`, takes effect on the very next poll
+cycle (`app/intelligence/news/service.py::fetch_and_persist_news` reads
+this table, not the static list) — no deploy needed. `source_key` and the
+rolling health fields (`last_fetched_at`/`last_status`/
+`articles_imported_count`) stay read-only —
+`app/services/news_source_repository.py::_EDITABLE_SOURCE_FIELDS` is the
+allowlist enforcing that.
+
+`GET /api/admin/fetch-logs` — every RSS poll attempt is logged
+(`NewsFetchLog`, written by `record_fetch_result` regardless of
+success/failure), so a persistently-failing source is visible in
+`/admin/monitoring` rather than silently going quiet.
+
+**Multilingual readiness**: the content model was already
+language-agnostic before this phase — `NewsSource.language` and
+`NewsArticle.language` are per-row fields (defaulting to `en`), decoupled
+from `portal_topic`/`slug`/`category`, so nothing in the schema assumes
+English. Adding a Russian- or Kazakh-language source is just a matter of
+inserting one with `language="ru"`/`"kk"` (via the admin sources API
+above, or a future "add source" UI) — no article gets duplicated per
+language, no schema change needed. Full translation of existing English
+content, or a language switcher on the portal, is intentionally not built
+here — that's a real product decision (machine-translate vs. only show
+native-language sources vs. something else) the spec explicitly leaves
+for later, not something to guess at now.
+
 ## News Platform: trending + full-text search
 
 `GET /api/news/trending` ranks articles by the same `importance_score`

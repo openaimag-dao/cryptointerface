@@ -83,7 +83,7 @@ while living in the same app:
 | `/`, `/category/{crypto,ai,blockchain,innovation}`, `/article/{id}`, `/search`, `/trending` | Public |
 | `/login`, `/register` | Public |
 | `/dashboard`, `/markets`, `/assets/{symbol}`, `/ai-chat`, `/portfolio`, `/signals`, `/backtesting`, `/liquidations`, `/macro`, `/news`, `/sentiment`, `/settings`, `/whales`, `/saved`, `/watchlist`, `/account` | Requires a logged-in session |
-| `/admin/news` | Requires a logged-in session with `role="admin"` |
+| `/admin/news`, `/admin/sources`, `/admin/monitoring` | Requires a logged-in session with `role="admin"` |
 
 `middleware.ts` verifies the same JWT the backend issues on
 register/login (`lib/session.ts`, via the `jose` library so it works in
@@ -134,3 +134,11 @@ can never grant real admin access even if it slipped past the frontend
 gate. The Sidebar only renders the "Admin" nav link for `role="admin"`
 users (`lib/constants.ts::ADMIN_NAV_ITEM`); there's no in-app way to
 become an admin — see `backend/scripts/promote_to_admin.py`.
+
+`app/(terminal)/admin/layout.tsx` adds a News / Sources / Monitoring tab
+strip shared by all `/admin/*` pages. `/admin/sources` lists the
+DB-backed RSS source registry with live `enabled`/`auto-publish` toggles
+(backend/README.md's "source management" section) — a change here
+affects the very next poll cycle, no deploy. `/admin/monitoring` is a
+read-only table of recent RSS poll attempts (`NewsFetchLog`), so a
+persistently-failing source is visible rather than silently going quiet.
