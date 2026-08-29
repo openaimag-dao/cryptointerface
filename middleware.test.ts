@@ -82,12 +82,43 @@ describe("middleware", () => {
     expect(response.status).toBe(200);
   });
 
+  it("redirects a non-admin session away from /admin", async () => {
+    vi.stubEnv("JWT_SECRET_KEY", TEST_SECRET);
+    const token = await signSessionToken({ sub: "1", role: "user" });
+
+    const response = await middleware(requestFor("/admin/news", token));
+
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe("/");
+  });
+
+  it("allows an admin session into /admin", async () => {
+    vi.stubEnv("JWT_SECRET_KEY", TEST_SECRET);
+    const token = await signSessionToken({ sub: "1", role: "admin" });
+
+    const response = await middleware(requestFor("/admin/news", token));
+
+    expect(response.status).toBe(200);
+  });
+
+  it("redirects to /login for /admin with no session at all (fails closed, not just non-admin)", async () => {
+    vi.stubEnv("JWT_SECRET_KEY", TEST_SECRET);
+
+    const response = await middleware(requestFor("/admin/news"));
+
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get("location")!);
+    expect(location.pathname).toBe("/login");
+  });
+
   it("matcher covers every (terminal) and private-dashboard route but leaves the portal root free", () => {
     expect(config.matcher).toContain("/dashboard/:path*");
     expect(config.matcher).toContain("/whales/:path*");
     expect(config.matcher).toContain("/saved/:path*");
     expect(config.matcher).toContain("/watchlist/:path*");
     expect(config.matcher).toContain("/account/:path*");
+    expect(config.matcher).toContain("/admin/:path*");
     expect(config.matcher).not.toContain("/:path*");
   });
 });

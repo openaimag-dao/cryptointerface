@@ -9,13 +9,22 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // resolve to "not authenticated" — never fall through to the terminal.
   const session = token ? await verifySessionToken(token) : null;
 
-  if (session) {
-    return NextResponse.next();
+  if (!session) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("next", request.nextUrl.pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
-  const loginUrl = new URL("/login", request.url);
-  loginUrl.searchParams.set("next", request.nextUrl.pathname);
-  return NextResponse.redirect(loginUrl);
+  // Editorial workflow admin pages need role="admin" on top of a valid
+  // session. This is a UX-layer gate only — every /api/admin/* call is
+  // independently re-checked against the DB-persisted role by the backend
+  // (app/api/deps.py::get_current_admin_user), so a stale JWT can never
+  // grant real admin access even if it slips past this check.
+  if (request.nextUrl.pathname.startsWith("/admin") && session.role !== "admin") {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  return NextResponse.next();
 }
 
 // The terminal/dashboard is a private tool, not part of the public news
@@ -42,5 +51,6 @@ export const config = {
     "/saved/:path*",
     "/watchlist/:path*",
     "/account/:path*",
+    "/admin/:path*",
   ],
 };

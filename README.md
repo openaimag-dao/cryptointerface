@@ -83,6 +83,7 @@ while living in the same app:
 | `/`, `/category/{crypto,ai,blockchain,innovation}`, `/article/{id}`, `/search` | Public |
 | `/login`, `/register` | Public |
 | `/dashboard`, `/markets`, `/assets/{symbol}`, `/ai-chat`, `/portfolio`, `/signals`, `/backtesting`, `/liquidations`, `/macro`, `/news`, `/sentiment`, `/settings`, `/whales`, `/saved`, `/watchlist`, `/account` | Requires a logged-in session |
+| `/admin/news` | Requires a logged-in session with `role="admin"` |
 
 `middleware.ts` verifies the same JWT the backend issues on
 register/login (`lib/session.ts`, via the `jose` library so it works in
@@ -96,3 +97,15 @@ Handlers, which set a first-party httpOnly cookie — the raw token never
 reaches client-side JS. `NEXT_PUBLIC_SITE_URL` (also frontend) is the
 canonical URL used by `app/sitemap.ts`/`app/robots.ts` for absolute URLs
 and OpenGraph tags.
+
+`/admin/news` is the editorial moderation queue (backend/README.md's
+"News Platform: editorial workflow + admin panel" section) — `middleware.ts`
+additionally checks the JWT's `role` claim is `"admin"` before allowing
+`/admin/*` through, redirecting anyone else to `/`. That check is UX-layer
+only: every `/api/admin/*` Route Handler forwards the session cookie as a
+Bearer token to the backend, which independently re-checks the
+DB-persisted role on every request, so a stale JWT (e.g. after a demotion)
+can never grant real admin access even if it slipped past the frontend
+gate. The Sidebar only renders the "Admin" nav link for `role="admin"`
+users (`lib/constants.ts::ADMIN_NAV_ITEM`); there's no in-app way to
+become an admin — see `backend/scripts/promote_to_admin.py`.

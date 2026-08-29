@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { ChevronsLeft, ChevronsRight, Zap } from "lucide-react";
 
-import { NAV_ITEMS } from "@/lib/constants";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { ADMIN_NAV_ITEM, NAV_ITEMS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui-store";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -14,6 +15,8 @@ export function Sidebar() {
   const pathname = usePathname();
   const collapsed = useUiStore((state) => state.sidebarCollapsed);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
+  const { data: currentUser } = useCurrentUser();
+  const items = currentUser?.role === "admin" ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
 
   return (
     <motion.aside
@@ -34,7 +37,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
-        {NAV_ITEMS.map((item) => {
+        {items.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
 
