@@ -58,6 +58,7 @@ async def fetch_and_persist_news(db: AsyncSession) -> int:
                 category=classification.category,
                 portal_topic=portal_topic,
                 editorial_status=editorial_status,
+                image_url=entry.image_url,
             )
             if inserted:
                 source_new_count += 1

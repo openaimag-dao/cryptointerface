@@ -22,6 +22,8 @@ export interface NewsItem {
   sentiment: Sentiment;
   category: string;
   portalTopic: PortalTopic | null;
+  aiSummary: string | null;
+  imageUrl: string | null;
 }
 
 export interface PortalNewsPage {

@@ -45,7 +45,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
 
   return (
     <div className="space-y-8">
-      <PageHeader title={topic.label} description={topic.description} />
+      <PageHeader title={topic.label} description={topic.description} serif />
 
       {digest ? <DigestCard digest={digest} /> : null}
 

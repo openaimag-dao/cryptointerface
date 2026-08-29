@@ -17,6 +17,8 @@ function makeItem(id: number): NewsItem {
     sentiment: "NEUTRAL",
     category: "Market",
     portalTopic: "CRYPTO",
+    aiSummary: null,
+    imageUrl: null,
   };
 }
 

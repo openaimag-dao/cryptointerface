@@ -60,6 +60,32 @@ async def test_fetch_and_persist_news_publishes_directly_for_auto_publish_source
 
 
 @pytest.mark.asyncio
+async def test_fetch_and_persist_news_persists_the_entrys_image_url(db_session, monkeypatch):
+    source = NewsSource(source_key="img", name="Img", rss_url="https://example.com/img", auto_publish=True)
+    db_session.add(source)
+    await db_session.commit()
+
+    async def fake_fetch_source(source_def):
+        return [
+            RawNewsEntry(
+                source="Test Source",
+                title="Has a real image",
+                summary="Summary text",
+                url="https://example.com/img/1",
+                published_at=int(datetime.now(UTC).timestamp()),
+                language="en",
+                image_url="https://cdn.example.com/photo.jpg",
+            )
+        ]
+
+    monkeypatch.setattr(service, "fetch_source", fake_fetch_source)
+    await fetch_and_persist_news(db_session)
+
+    articles = await get_latest_news(db_session, limit=10)
+    assert articles[0].image_url == "https://cdn.example.com/photo.jpg"
+
+
+@pytest.mark.asyncio
 async def test_fetch_and_persist_news_sends_manual_review_sources_to_pending(db_session, monkeypatch):
     source = NewsSource(source_key="manual", name="Manual", rss_url="https://example.com/manual", auto_publish=False)
     db_session.add(source)

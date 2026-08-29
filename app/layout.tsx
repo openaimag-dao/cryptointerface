@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Source_Serif_4 } from "next/font/google";
 import { Providers } from "./providers";
 import { SITE_URL } from "@/lib/env";
 import "./globals.css";
@@ -11,6 +11,15 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+// Editorial headline serif for the public News Portal only — the private
+// trading terminal keeps Geist Sans throughout. Loaded globally (cheap,
+// subset to latin) so the (portal) route group can apply it via the
+// `--font-serif` theme token without a second font-loading boundary.
+const sourceSerif = Source_Serif_4({
+  variable: "--font-source-serif",
   subsets: ["latin"],
 });
 
@@ -44,7 +53,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${sourceSerif.variable} antialiased`}
       >
         <Providers>{children}</Providers>
       </body>

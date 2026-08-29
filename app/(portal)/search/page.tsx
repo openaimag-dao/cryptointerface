@@ -37,6 +37,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             ? `${result.total} article${result.total === 1 ? "" : "s"} matched`
             : "Search across all AIMAG News articles"
         }
+        serif
       />
 
       <form action="/search" method="get" className="flex gap-2">

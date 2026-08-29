@@ -624,6 +624,19 @@ cd backend && .venv/bin/python -m scripts.promote_to_admin someone@example.com
 The user must already be registered; the script exits 1 with a message if
 the email isn't found.
 
+## News Platform: real article images
+
+`NewsArticle.image_url` (nullable) is a real image URL pulled straight
+from the RSS entry itself — `app/intelligence/news/fetcher.py::
+_entry_image_url` checks Media RSS's `<media:content>`/`<media:thumbnail>`
+(`feedparser`'s `media_content`/`media_thumbnail`) and then a plain
+`<enclosure>` link with an `image/*` type, in that priority order. Never
+fabricated or guessed, and never a placeholder graphic — most sources do
+populate one of these (verified against Cointelegraph, Decrypt, and
+CryptoSlate's real feeds), but a source that genuinely doesn't include one
+just leaves this null, and the frontend renders a text-only card in that
+case (`components/portal/news-card.tsx`).
+
 ## News Platform: trending + full-text search
 
 `GET /api/news/trending` ranks articles by the same `importance_score`

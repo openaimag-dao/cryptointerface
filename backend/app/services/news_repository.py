@@ -46,12 +46,15 @@ async def insert_article(
     category: str,
     portal_topic: str | None = None,
     editorial_status: str = "PUBLISHED",
+    image_url: str | None = None,
 ) -> bool:
     """Returns True if this was a genuinely new article (not a dupe).
 
     `editorial_status` defaults to PUBLISHED — the pre-Q1 behavior every
     existing source and test relies on. Sources with `auto_publish=False`
-    (app/models/news_source.py) pass PENDING_REVIEW instead."""
+    (app/models/news_source.py) pass PENDING_REVIEW instead. `image_url`
+    is whatever the RSS entry itself provided (see fetcher.py) — never
+    fabricated, so it's frequently None."""
     stmt = (
         pg_insert(NewsArticle)
         .values(
@@ -68,6 +71,7 @@ async def insert_article(
             portal_topic=portal_topic,
             slug=slugify(title, url),
             editorial_status=editorial_status,
+            image_url=image_url,
         )
         .on_conflict_do_nothing(index_elements=["url"])
         .returning(NewsArticle.id)

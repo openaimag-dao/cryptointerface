@@ -16,6 +16,7 @@ class NewsItem(CamelModel):
     category: str
     portal_topic: str | None
     ai_summary: str | None
+    image_url: str | None
 
 
 class PortalNewsPage(CamelModel):

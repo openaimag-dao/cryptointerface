@@ -39,6 +39,7 @@ async def _apply_lightweight_migrations(conn: AsyncConnection) -> None:
         "ALTER TABLE news ADD COLUMN IF NOT EXISTS news_event_id BIGINT REFERENCES news_events(id)",
         "ALTER TABLE news ADD COLUMN IF NOT EXISTS author_id BIGINT REFERENCES authors(id)",
         "ALTER TABLE news ADD COLUMN IF NOT EXISTS ai_summary VARCHAR(1000)",
+        "ALTER TABLE news ADD COLUMN IF NOT EXISTS image_url VARCHAR(1000)",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_news_slug ON news (slug)",
         # Q6: real Postgres full-text search (news_repository.py::search_news)
         # over title (weight A) + summary (weight B) — a GIN expression

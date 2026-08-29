@@ -31,6 +31,7 @@ export default async function TrendingPage({ searchParams }: TrendingPageProps) 
       <PageHeader
         title="Trending"
         description="Ranked by real coverage: how many independent sources reported it and how significant the classifier scored it — not a fabricated view counter."
+        serif
       />
 
       <nav className="flex flex-wrap gap-2 text-sm">

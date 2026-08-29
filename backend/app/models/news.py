@@ -63,3 +63,9 @@ class NewsArticle(Base, IdMixin, CreatedAtMixin):
     news_event_id: Mapped[int | None] = mapped_column(ForeignKey("news_events.id"), nullable=True)
     author_id: Mapped[int | None] = mapped_column(ForeignKey("authors.id"), nullable=True)
     ai_summary: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    # A real image URL pulled straight from the RSS entry itself (Media RSS
+    # or a plain enclosure — see intelligence/news/fetcher.py::
+    # _entry_image_url), never fabricated. Null when the source's feed
+    # genuinely doesn't include one — the frontend renders a text-only
+    # card in that case rather than a placeholder graphic.
+    image_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)

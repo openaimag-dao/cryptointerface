@@ -36,6 +36,7 @@ class RawNewsEntry:
     url: str
     published_at: int  # unix seconds
     language: str
+    image_url: str | None = None
 
 
 def _entry_published_at(entry: object) -> int:
@@ -44,6 +45,32 @@ def _entry_published_at(entry: object) -> int:
         if parsed:
             return int(time.mktime(parsed))
     return int(time.time())
+
+
+def _entry_image_url(entry: object) -> str | None:
+    """A real image URL from the feed itself — Media RSS's
+    `<media:content>`/`<media:thumbnail>` (feedparser: `media_content`/
+    `media_thumbnail`) or a plain `<enclosure>` link, in that priority
+    order (most feeds only populate one of these). Never fabricated or
+    guessed — None when the feed genuinely doesn't include one, and the
+    frontend falls back to a text-only card in that case."""
+    media_content = getattr(entry, "media_content", None)
+    if media_content:
+        url = media_content[0].get("url")
+        if url:
+            return url
+
+    media_thumbnail = getattr(entry, "media_thumbnail", None)
+    if media_thumbnail:
+        url = media_thumbnail[0].get("url")
+        if url:
+            return url
+
+    for link in getattr(entry, "links", []):
+        if link.get("rel") == "enclosure" and str(link.get("type", "")).startswith("image/"):
+            return link.get("href")
+
+    return None
 
 
 def _clean_summary(raw_html: str) -> str:
@@ -82,6 +109,7 @@ async def fetch_source(source: NewsSourceDef, timeout: float = 10.0) -> list[Raw
         if not title or not url:
             continue
         summary_html = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
+        image_url = _entry_image_url(entry)
         entries.append(
             RawNewsEntry(
                 source=source.name,
@@ -90,6 +118,7 @@ async def fetch_source(source: NewsSourceDef, timeout: float = 10.0) -> list[Raw
                 url=url,
                 published_at=_entry_published_at(entry),
                 language=source.language,
+                image_url=image_url if image_url and image_url.startswith(("http://", "https://")) else None,
             )
         )
     return entries

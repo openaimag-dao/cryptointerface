@@ -98,6 +98,31 @@ reaches client-side JS. `NEXT_PUBLIC_SITE_URL` (also frontend) is the
 canonical URL used by `app/sitemap.ts`/`app/robots.ts` for absolute URLs
 and OpenGraph tags.
 
+### Portal visual identity
+
+The public portal (`app/(portal)/`) deliberately looks nothing like the
+trading terminal: a warm paper background, ink text, a serif headline
+typeface (Source Serif 4, `--font-serif`), and a muted editorial
+green/brick-red palette instead of the terminal's dark background and
+neon-green accent. This is scoped by a `.portal-theme` class wrapping
+`app/(portal)/layout.tsx`'s root element (`app/globals.css`) that
+redefines the same CSS custom properties (`--background`, `--accent`,
+etc.) the terminal uses — so every existing UI primitive (`Card`,
+`Badge`, `Button`...) re-themes automatically with zero component
+changes, and the terminal's own dark theme is completely unaffected
+outside that scope. `PageHeader` takes an optional `serif` prop for
+portal section headings; the terminal's dashboard-style pages leave it
+off.
+
+Article images (`NewsItem.imageUrl`) are real image URLs pulled from
+each source's own RSS feed (Media RSS `<media:content>`/
+`<media:thumbnail>` or a plain `<enclosure>` — see backend/README.md's
+"real article images" section) — never a placeholder graphic, so a
+card or the article-page hero simply omits the image entirely when the
+source's feed doesn't include one. `components/portal/article-image.tsx`
+handles a URL that later goes stale (the publisher deletes/moves it) by
+hiding itself on load failure rather than showing a broken-image icon.
+
 `/admin/news` is the editorial moderation queue (backend/README.md's
 "News Platform: editorial workflow + admin panel" section) — `middleware.ts`
 additionally checks the JWT's `role` claim is `"admin"` before allowing
