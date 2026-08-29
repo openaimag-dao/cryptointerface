@@ -1,9 +1,15 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { cookies } from "next/headers";
 
 import { PORTAL_TOPICS } from "@/lib/portal-topics";
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
-export default function PortalLayout({ children }: { children: ReactNode }) {
+export default async function PortalLayout({ children }: { children: ReactNode }) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const session = token ? await verifySessionToken(token) : null;
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b border-border-strong">
@@ -27,6 +33,15 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
             <Link href="/dashboard" className="text-xs text-muted-foreground/70 transition-colors hover:text-foreground">
               Terminal ↗
             </Link>
+            {session ? (
+              <Link href="/account" className="transition-colors hover:text-foreground">
+                Account
+              </Link>
+            ) : (
+              <Link href="/login" className="transition-colors hover:text-foreground">
+                Sign in
+              </Link>
+            )}
           </nav>
         </div>
       </header>

@@ -1,5 +1,6 @@
 import {
   Activity,
+  Bookmark,
   Bot,
   Flame,
   Gauge,
@@ -9,6 +10,8 @@ import {
   MessageSquareText,
   Newspaper,
   Settings,
+  Star,
+  User,
   Wallet,
   Waves,
 } from "lucide-react";
@@ -31,7 +34,10 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Portfolio", href: "/portfolio", icon: Wallet },
   { label: "Backtesting", href: "/backtesting", icon: Activity },
   { label: "AI Chat", href: "/ai-chat", icon: MessageSquareText },
+  { label: "Saved News", href: "/saved", icon: Bookmark },
+  { label: "Watchlist", href: "/watchlist", icon: Star },
   { label: "Settings", href: "/settings", icon: Settings },
+  { label: "Account", href: "/account", icon: User },
 ];
 
 // Primary Dashboard watchlist + chart symbol tabs. Must be a subset of the

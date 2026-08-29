@@ -74,16 +74,25 @@ Blockchain, and Innovation headlines aggregated from 9 real RSS sources
 and classified automatically, with an AI-narrated digest per topic (real
 articles only, no fabrication — see backend/README.md's "News Portal
 (Public)" section). The trading terminal itself (Dashboard, Markets,
-Assets, etc.) moved to `/dashboard` and friends, gated by HTTP Basic
-Auth (`middleware.ts`) so it stays private while living in the same app:
+Assets, etc.) moved to `/dashboard` and friends, gated by a real login
+(`/login`, `/register`) rather than a shared secret, so it stays private
+while living in the same app:
 
 | Route | Access |
 |---|---|
 | `/`, `/category/{crypto,ai,blockchain,innovation}`, `/article/{id}`, `/search` | Public |
-| `/dashboard`, `/markets`, `/assets/{symbol}`, `/ai-chat`, `/portfolio`, `/signals`, `/backtesting`, `/liquidations`, `/macro`, `/news`, `/sentiment`, `/settings`, `/whales` | Requires `TERMINAL_BASIC_AUTH_USER`/`TERMINAL_BASIC_AUTH_PASSWORD` |
+| `/login`, `/register` | Public |
+| `/dashboard`, `/markets`, `/assets/{symbol}`, `/ai-chat`, `/portfolio`, `/signals`, `/backtesting`, `/liquidations`, `/macro`, `/news`, `/sentiment`, `/settings`, `/whales`, `/saved`, `/watchlist`, `/account` | Requires a logged-in session |
 
-Set both env vars (frontend, not `NEXT_PUBLIC_*` — they're server-only) to
-enable the terminal; **unset, it fails closed** (401 on every terminal
-route) rather than being left open. `NEXT_PUBLIC_SITE_URL` (also
-frontend) is the canonical URL used by `app/sitemap.ts`/`app/robots.ts`
-for absolute URLs and OpenGraph tags.
+`middleware.ts` verifies the same JWT the backend issues on
+register/login (`lib/session.ts`, via the `jose` library so it works in
+the Edge runtime) — set `JWT_SECRET_KEY` (frontend, server-only) to the
+**exact same value** as the backend's `JWT_SECRET_KEY`
+(backend/.env.example), or every terminal route redirects to `/login`
+(fails closed by design, same reasoning the old Basic Auth gate used).
+The backend and frontend are on separate domains (Railway/Vercel), so
+register/login proxy through this frontend's own `/api/auth/*` Route
+Handlers, which set a first-party httpOnly cookie — the raw token never
+reaches client-side JS. `NEXT_PUBLIC_SITE_URL` (also frontend) is the
+canonical URL used by `app/sitemap.ts`/`app/robots.ts` for absolute URLs
+and OpenGraph tags.

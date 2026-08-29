@@ -517,12 +517,49 @@ Decision Engine.
   back to a clearly-labeled message with a real `article_count` — never
   an exception.
 - **Access**: the portal is fully public. The terminal (everything under
-  the frontend's `(terminal)` route group) is gated by HTTP Basic Auth in
-  the frontend's `middleware.ts` — see the frontend README/section below
-  for `TERMINAL_BASIC_AUTH_USER`/`TERMINAL_BASIC_AUTH_PASSWORD`.
+  the frontend's `(terminal)` route group, plus `/saved`/`/watchlist`/
+  `/account`) requires a real logged-in session — see "News Platform:
+  real user accounts" below and the frontend README's `middleware.ts`
+  section.
 - **SEO**: `app/sitemap.ts`/`app/robots.ts` (frontend) list the portal's
   routes and the most recent 300 articles, and disallow every terminal
   route — see the frontend README section.
+
+## News Platform: real user accounts
+
+Real accounts (`app/services/auth_service.py`, `app/api/auth.py`,
+`app/api/user.py`) back the private dashboard — saved articles and a
+watchlist placeholder — and the future admin panel. The public News
+Portal never requires one.
+
+- **Password hashing**: bcrypt (`bcrypt` package directly, not
+  passlib — avoids a known passlib/modern-bcrypt version-detection
+  incompatibility).
+- **Sessions**: JWT (HS256, PyJWT), 7 days by default
+  (`JWT_EXPIRE_MINUTES`). `POST /api/auth/register`/`login` return the
+  token in the JSON body rather than a cookie, since the frontend is on a
+  different domain (Vercel) than this backend (Railway) and couldn't
+  read a cross-origin cookie; the frontend's own `/api/auth/*` Route
+  Handlers proxy through here and set a first-party httpOnly cookie —
+  see the frontend README.
+- **Fails closed**: `JWT_SECRET_KEY` unset means register/login return
+  503 rather than issuing a token no one can safely verify — opposite of
+  this codebase's usual fail-open data-enrichment default, since this is
+  access control. Generate one with `openssl rand -hex 32` and use the
+  **exact same value** on the frontend (`JWT_SECRET_KEY` there too, no
+  `NEXT_PUBLIC_` prefix) — both sides verify the same token.
+- **Authorization**: `get_current_user` (`app/api/deps.py`) re-fetches
+  the user from the DB on every request rather than trusting the JWT's
+  embedded role — a role change or deactivation takes effect immediately
+  without needing token revocation. `get_current_admin_user` builds on
+  it for the future admin panel (Q5); new accounts always register as
+  `role="user"`, never client-settable.
+- **Endpoints**: `POST /api/auth/register` (409 on duplicate email),
+  `POST /api/auth/login` (generic 401 for both unknown-email and
+  wrong-password — no account enumeration), `GET /api/auth/me`,
+  `GET/POST/DELETE /api/user/bookmarks[/{id}]`,
+  `GET/POST/DELETE /api/user/watchlist[/{symbol}]` (capped at 50
+  symbols; architecture only — no live prices wired in yet).
 
 ## Backtesting Engine (Sprint 5)
 

@@ -7,6 +7,7 @@ import { timeAgo } from "@/lib/utils";
 import { fetchArticleById } from "@/services/news-service";
 import { Badge } from "@/components/ui/badge";
 import { SentimentBadge } from "@/components/common/sentiment-badge";
+import { SaveArticleButton } from "@/components/portal/save-article-button";
 
 interface ArticlePageProps {
   params: Promise<{ id: string }>;
@@ -61,6 +62,9 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             {symbol}
           </Badge>
         ))}
+        <span className="ml-auto">
+          <SaveArticleButton articleId={article.id} />
+        </span>
       </div>
 
       <p className="text-sm leading-relaxed text-muted-foreground">{article.summary}</p>
