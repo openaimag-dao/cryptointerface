@@ -40,6 +40,7 @@ from app.intelligence.scheduler.tasks import (
     run_whale_poller,
 )
 from app.services.binance.ws_client import ConnectionState
+from app.services.news_source_repository import seed_default_sources
 from app.services.websocket.manager import connection_manager
 from app.tasks.coingecko_fallback import run_coingecko_fallback_poller
 from app.tasks.historical_loader import run_historical_backfill
@@ -62,6 +63,8 @@ async def _on_ws_state_change(connection_index: int, state: ConnectionState) -> 
 async def lifespan(app: FastAPI):
     logger.info("app_starting", extra={"environment": settings.environment, "symbols": settings.symbol_list})
     await init_models()
+    async with AsyncSessionLocal() as db:
+        await seed_default_sources(db)
 
     live_feed = LiveFeedService(broadcast=connection_manager.broadcast, on_state_change=_on_ws_state_change)
 

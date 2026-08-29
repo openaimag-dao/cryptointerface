@@ -1,8 +1,17 @@
-from sqlalchemy import JSON, BigInteger, Float, Index, String, UniqueConstraint
+from sqlalchemy import JSON, BigInteger, Float, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
 from app.models.mixins import CreatedAtMixin, IdMixin
+
+# imported: just written by the fetcher, not yet classified/AI-processed (transient in practice).
+# processing: classifier/AI stages running.
+# pending_review: source has auto_publish=False — waiting on an editor.
+# approved: editor signed off, not yet live.
+# published: live on the public portal (the only state that existed before Q1 — RSS
+#   auto-publish sources default straight here, so existing behavior is unchanged).
+# rejected / archived: editor pulled it, or it aged out.
+EDITORIAL_STATUSES = ("IMPORTED", "PROCESSING", "PENDING_REVIEW", "APPROVED", "PUBLISHED", "REJECTED", "ARCHIVED")
 
 
 class NewsArticle(Base, IdMixin, CreatedAtMixin):
@@ -22,11 +31,19 @@ class NewsArticle(Base, IdMixin, CreatedAtMixin):
     trading terminal's news tab uses and which nothing else reads. Nullable
     because it's assigned by `classify_portal_topic()` at ingest; rows never
     get backfilled with a guess.
+
+    `slug`/`editorial_status`/`news_event_id`/`author_id`/`ai_summary` are
+    the News Platform foundation (Q1): SEO-friendly URLs, the editorial
+    workflow (Q5), deduplication grouping (Q3), and a byline + an
+    AI-generated original summary distinct from the raw RSS `summary`
+    (Q4) — respectively. All nullable/defaulted so every pre-existing row
+    and every current News Engine consumer keeps working unchanged.
     """
 
     __tablename__ = "news"
     __table_args__ = (
         UniqueConstraint("url", name="uq_news_url"),
+        UniqueConstraint("slug", name="uq_news_slug"),
         Index("ix_news_published_at", "published_at"),
     )
 
@@ -41,3 +58,8 @@ class NewsArticle(Base, IdMixin, CreatedAtMixin):
     sentiment: Mapped[str] = mapped_column(String(8), nullable=False)  # BULLISH | BEARISH | NEUTRAL
     category: Mapped[str] = mapped_column(String(32), nullable=False)
     portal_topic: Mapped[str | None] = mapped_column(String(16), nullable=True)  # CRYPTO|AI|BLOCKCHAIN|INNOVATION
+    slug: Mapped[str | None] = mapped_column(String(140), nullable=True)
+    editorial_status: Mapped[str] = mapped_column(String(16), nullable=False, default="PUBLISHED")
+    news_event_id: Mapped[int | None] = mapped_column(ForeignKey("news_events.id"), nullable=True)
+    author_id: Mapped[int | None] = mapped_column(ForeignKey("authors.id"), nullable=True)
+    ai_summary: Mapped[str | None] = mapped_column(String(1000), nullable=True)

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_engine.types import NewsSnapshot
 from app.models.news import NewsArticle
+from app.utils.slug import slugify
 
 # How far back a symbol/market-wide news snapshot looks for score_news()
 # and the Sentiment Engine — recent enough that stale news doesn't keep
@@ -36,8 +37,13 @@ async def insert_article(
     sentiment: str,
     category: str,
     portal_topic: str | None = None,
+    editorial_status: str = "PUBLISHED",
 ) -> bool:
-    """Returns True if this was a genuinely new article (not a dupe)."""
+    """Returns True if this was a genuinely new article (not a dupe).
+
+    `editorial_status` defaults to PUBLISHED — the pre-Q1 behavior every
+    existing source and test relies on. Sources with `auto_publish=False`
+    (app/models/news_source.py) pass PENDING_REVIEW instead."""
     stmt = (
         pg_insert(NewsArticle)
         .values(
@@ -52,6 +58,8 @@ async def insert_article(
             sentiment=sentiment,
             category=category,
             portal_topic=portal_topic,
+            slug=slugify(title, url),
+            editorial_status=editorial_status,
         )
         .on_conflict_do_nothing(index_elements=["url"])
         .returning(NewsArticle.id)
