@@ -624,6 +624,49 @@ cd backend && .venv/bin/python -m scripts.promote_to_admin someone@example.com
 The user must already be registered; the script exits 1 with a message if
 the email isn't found.
 
+## News Platform: source coverage
+
+`app/intelligence/news/sources.py::NEWS_SOURCES` — 17 real RSS sources
+across the four portal topics (up from 9): Crypto adds NewsBTC,
+CryptoNews, and The Defiant; AI adds MIT Technology Review; Blockchain
+adds Blockworks and DL News; Innovation adds The Verge and Ars Technica.
+Every URL was verified live (real XML, real entries via `feedparser`)
+before being added, same discipline as the original 9. `fetcher.py`'s
+`fetch_source` now follows HTTP redirects (`follow_redirects=True`) — a
+source's canonical feed URL moving over its lifetime (a domain migration,
+`http`→`https`, bare-domain→`www`) previously meant a "SUCCESS" fetch
+that silently found zero entries forever, rather than a visible error.
+
+## News Platform: article translation (RU/KK)
+
+`ArticleTranslation` (`app/models/article_translation.py`) is a real
+Claude-translated title + summary for one article, one language —
+deliberately a separate table keyed on `article_id` rather than extra
+`title_ru`/`title_kk` columns or a duplicated `NewsArticle` row per
+language, per the platform spec's own "multilingual-ready... without
+duplicating articles per language" guidance. Adding a third language
+later is a data migration, not a schema change.
+
+- `app/intelligence/llm/news_translation.py::build_news_translation` —
+  same anti-fabrication discipline as `news_processing.py` (Q4): Claude
+  is given only the real ingested title/summary and a fixed JSON schema
+  (`tool_choice`-forced), instructed to translate faithfully — never add,
+  omit, or embellish. Currently RU and KK
+  (`SUPPORTED_TRANSLATION_LANGUAGES`).
+- `run_news_translation` (scheduler, 30min default) backfills
+  `ArticleTranslation` rows for PUBLISHED articles missing one, one
+  language at a time, oldest-missing-first — same "drain the backlog
+  gradually" shape as `run_ai_news_processing`. No-ops entirely without
+  `ANTHROPIC_API_KEY`.
+- `GET /api/news/{portal,search,trending,{article_id}}` all accept
+  `?lang=ru` or `?lang=kk` — when a translation exists for that article,
+  the response's `title`/`summary` are the translated text; otherwise
+  (translation pipeline hasn't reached it yet, or an unrecognized value)
+  it silently falls back to the original English. `ai_summary` (Q4) is
+  never translated — it's only ever shown in the English reading mode on
+  the frontend, since a mismatched-language AI summary box would read as
+  broken rather than helpful.
+
 ## News Platform: real article images
 
 `NewsArticle.image_url` (nullable) is a real image URL pulled straight

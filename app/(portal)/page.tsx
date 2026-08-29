@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 
 import { PortalNewsCard } from "@/components/portal/news-card";
 import { PortalPagination } from "@/components/portal/pagination";
 import { parsePageParam } from "@/lib/pagination";
 import { PORTAL_TOPICS } from "@/lib/portal-topics";
+import { PORTAL_LANGUAGE_COOKIE, portalStrings, resolvePortalLanguage, topicStrings } from "@/lib/portal-i18n";
 import { fetchPortalNews, fetchTrendingNews } from "@/services/news-service";
 
 const PAGE_SIZE = 24;
@@ -16,10 +18,12 @@ export default async function PortalHomePage({ searchParams }: PortalHomePagePro
   const { page: pageParam } = await searchParams;
   const page = parsePageParam(pageParam);
   const isFirstPage = page === 1;
+  const lang = resolvePortalLanguage((await cookies()).get(PORTAL_LANGUAGE_COOKIE)?.value);
+  const t = portalStrings(lang);
 
   const [result, trending] = await Promise.all([
-    fetchPortalNews(undefined, PAGE_SIZE, (page - 1) * PAGE_SIZE),
-    isFirstPage ? fetchTrendingNews(undefined, 6) : Promise.resolve([]),
+    fetchPortalNews(undefined, PAGE_SIZE, (page - 1) * PAGE_SIZE, lang),
+    isFirstPage ? fetchTrendingNews(undefined, 6, lang) : Promise.resolve([]),
   ]);
   const items = result?.items ?? [];
   const totalPages = result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1;
@@ -41,13 +45,13 @@ export default async function PortalHomePage({ searchParams }: PortalHomePagePro
             href={`/category/${topic.slug}`}
             className="rounded-full border border-border-strong px-3 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-accent hover:text-accent"
           >
-            {topic.label}
+            {topicStrings(lang, topic.value).label}
           </Link>
         ))}
       </div>
 
       {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No articles yet. Check back soon.</p>
+        <p className="text-sm text-muted-foreground">{t.homeNoArticles}</p>
       ) : (
         <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-3">
           <div className="space-y-8 lg:col-span-2">
@@ -65,9 +69,9 @@ export default async function PortalHomePage({ searchParams }: PortalHomePagePro
           {sidebarTrending.length > 0 ? (
             <aside className="space-y-4">
               <div className="flex items-center justify-between border-b border-border-strong pb-2">
-                <h2 className="font-serif text-lg font-semibold text-foreground">Trending Now</h2>
+                <h2 className="font-serif text-lg font-semibold text-foreground">{t.homeTrendingNow}</h2>
                 <Link href="/trending" className="text-xs font-medium text-accent hover:underline">
-                  See all
+                  {t.homeSeeAll}
                 </Link>
               </div>
               <ol className="space-y-4">

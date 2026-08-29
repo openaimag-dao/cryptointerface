@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { isSafeRedirectPath } from "@/lib/safe-redirect";
 import { RegisterForm } from "@/components/auth/register-form";
 
 export const metadata: Metadata = {
@@ -9,10 +10,6 @@ export const metadata: Metadata = {
 
 interface RegisterPageProps {
   searchParams: Promise<{ next?: string }>;
-}
-
-function isSafeRedirectPath(path: string | undefined): path is string {
-  return !!path && path.startsWith("/") && !path.startsWith("//");
 }
 
 export default async function RegisterPage({ searchParams }: RegisterPageProps) {

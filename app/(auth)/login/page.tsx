@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { isSafeRedirectPath } from "@/lib/safe-redirect";
 import { LoginForm } from "@/components/auth/login-form";
 
 export const metadata: Metadata = {
@@ -9,12 +10,6 @@ export const metadata: Metadata = {
 
 interface LoginPageProps {
   searchParams: Promise<{ next?: string }>;
-}
-
-function isSafeRedirectPath(path: string | undefined): path is string {
-  // Must be a same-site relative path — reject absolute/protocol-relative
-  // URLs (e.g. "//evil.com") to avoid using this as an open redirect.
-  return !!path && path.startsWith("/") && !path.startsWith("//");
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {

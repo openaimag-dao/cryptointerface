@@ -40,6 +40,7 @@ from app.intelligence.scheduler.tasks import (
     run_macro_poller,
     run_news_digest_refresh,
     run_news_poller,
+    run_news_translation,
     run_sentiment_recompute,
     run_whale_poller,
 )
@@ -93,6 +94,7 @@ async def lifespan(app: FastAPI):
     _background_tasks.append(asyncio.create_task(run_llm_explanation_refresh(stop_event=_stop_event)))
     _background_tasks.append(asyncio.create_task(run_news_digest_refresh(stop_event=_stop_event)))
     _background_tasks.append(asyncio.create_task(run_ai_news_processing(stop_event=_stop_event)))
+    _background_tasks.append(asyncio.create_task(run_news_translation(stop_event=_stop_event)))
 
     yield
 

@@ -123,6 +123,23 @@ source's feed doesn't include one. `components/portal/article-image.tsx`
 handles a URL that later goes stale (the publisher deletes/moves it) by
 hiding itself on load failure rather than showing a broken-image icon.
 
+**Live prices**: `components/portal/price-ticker.tsx` reads the same
+real, public `GET /api/market` endpoint the trading terminal uses
+(Binance-backed via the Data Engine, no auth required) — not a separate
+or mocked feed — and renders every configured symbol's price + 24h
+change as a strip at the very top of every portal page.
+
+**Multilingual (EN/RU/KK)**: `lib/portal-i18n.ts` holds the portal's UI
+chrome strings (nav, buttons, empty states) for all three languages, plus
+per-topic labels/descriptions. The reader's choice is a first-party
+`portal_lang` cookie, set by `GET /api/locale?lang=ru&next=/path`
+(`components/portal/language-switcher.tsx`'s EN/RU/KK links in the
+masthead) and read by every portal page via `cookies()` to both pick the
+UI strings and request translated article content from the backend
+(`?lang=` on `/api/news/*` — see backend/README.md's "article translation"
+section). An article without a translation yet falls back to its
+original English silently — never a blank or an error.
+
 `/admin/news` is the editorial moderation queue (backend/README.md's
 "News Platform: editorial workflow + admin panel" section) — `middleware.ts`
 additionally checks the JWT's `role` claim is `"admin"` before allowing

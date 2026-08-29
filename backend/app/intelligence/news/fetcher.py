@@ -81,7 +81,13 @@ def _clean_summary(raw_html: str) -> str:
 
 async def fetch_source(source: NewsSourceDef, timeout: float = 10.0) -> list[RawNewsEntry]:
     async def _do_request() -> bytes:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        # follow_redirects: a feed's canonical URL moving (a domain
+        # migration, an http->https or a bare-domain->www redirect) is
+        # common over a source's lifetime — without this, httpx returns
+        # the empty/HTML redirect response body itself, which silently
+        # parses as zero entries (a "SUCCESS" fetch that just never finds
+        # anything) rather than a visible error.
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             response = await client.get(source.rss_url, headers={"User-Agent": "AIMAG-AI-Terminal/1.0"})
             if response.status_code in RETRYABLE_STATUS_CODES:
                 raise NewsFetchError(f"Retryable status {response.status_code} from {source.id}")

@@ -34,6 +34,9 @@ NEWS_SOURCES: list[NewsSourceDef] = [
     NewsSourceDef(id="coindesk", name="CoinDesk", rss_url="https://www.coindesk.com/arc/outboundfeeds/rss/"),
     NewsSourceDef(id="cointelegraph", name="Cointelegraph", rss_url="https://cointelegraph.com/rss"),
     NewsSourceDef(id="decrypt", name="Decrypt", rss_url="https://decrypt.co/feed"),
+    NewsSourceDef(id="newsbtc", name="NewsBTC", rss_url="https://www.newsbtc.com/feed/"),
+    NewsSourceDef(id="cryptonews", name="CryptoNews", rss_url="https://cryptonews.com/news/feed/"),
+    NewsSourceDef(id="thedefiant", name="The Defiant", rss_url="https://thedefiant.io/api/feed"),
     # AI
     NewsSourceDef(
         id="techcrunch-ai",
@@ -47,6 +50,12 @@ NEWS_SOURCES: list[NewsSourceDef] = [
         rss_url="https://venturebeat.com/category/ai/feed/",
         default_topic="AI",
     ),
+    NewsSourceDef(
+        id="mit-tech-review",
+        name="MIT Technology Review",
+        rss_url="https://www.technologyreview.com/feed/",
+        default_topic="AI",
+    ),
     # Blockchain (infra/institutional angle, distinct from CRYPTO's market-news sources)
     NewsSourceDef(
         id="theblock", name="The Block", rss_url="https://www.theblock.co/rss.xml", default_topic="BLOCKCHAIN"
@@ -54,9 +63,30 @@ NEWS_SOURCES: list[NewsSourceDef] = [
     NewsSourceDef(
         id="cryptoslate", name="CryptoSlate", rss_url="https://cryptoslate.com/feed/", default_topic="BLOCKCHAIN"
     ),
+    NewsSourceDef(
+        id="blockworks", name="Blockworks", rss_url="https://blockworks.com/feed", default_topic="BLOCKCHAIN"
+    ),
+    NewsSourceDef(
+        id="dlnews",
+        name="DL News",
+        rss_url="https://dlnews.com/arc/outboundfeeds/rss/",
+        default_topic="BLOCKCHAIN",
+    ),
     # Innovation (general tech)
     NewsSourceDef(
         id="techcrunch", name="TechCrunch", rss_url="https://techcrunch.com/feed/", default_topic="INNOVATION"
     ),
     NewsSourceDef(id="wired", name="Wired", rss_url="https://www.wired.com/feed/rss", default_topic="INNOVATION"),
+    NewsSourceDef(
+        id="theverge",
+        name="The Verge",
+        rss_url="https://www.theverge.com/rss/index.xml",
+        default_topic="INNOVATION",
+    ),
+    NewsSourceDef(
+        id="arstechnica",
+        name="Ars Technica",
+        rss_url="https://arstechnica.com/feed/",
+        default_topic="INNOVATION",
+    ),
 ]

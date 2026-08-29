@@ -1,6 +1,7 @@
 from app.models.ai_analysis import AIAnalysis
 from app.models.ai_processing_log import AIProcessingLog
 from app.models.article_associations import ArticleEntity, ArticleTag
+from app.models.article_translation import ArticleTranslation
 from app.models.author import Author
 from app.models.backtest_metrics import BacktestMetrics
 from app.models.backtest_run import BacktestRun
@@ -34,6 +35,7 @@ __all__ = [
     "AIProcessingLog",
     "ArticleEntity",
     "ArticleTag",
+    "ArticleTranslation",
     "Author",
     "BacktestMetrics",
     "BacktestRun",
