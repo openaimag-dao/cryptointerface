@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/common/page-header";
@@ -12,6 +13,19 @@ const PAGE_SIZE = 24;
 interface CategoryPageProps {
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ page?: string }>;
+}
+
+export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const topic = portalTopicForSlug(slug);
+  if (!topic) return {};
+
+  return {
+    title: topic.label,
+    description: topic.description,
+    alternates: { canonical: `/category/${topic.slug}` },
+    openGraph: { title: topic.label, description: topic.description },
+  };
 }
 
 export default async function CategoryPage({ params, searchParams }: CategoryPageProps) {

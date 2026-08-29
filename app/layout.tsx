@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "./providers";
+import { SITE_URL } from "@/lib/env";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,9 +14,26 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_NAME = "AIMAG News";
+const SITE_DESCRIPTION = "Crypto, AI, Blockchain & Innovation headlines — aggregated and classified automatically.";
+
+// The (terminal) route group overrides this with its own metadata (private
+// tool, not part of the public news portal) — see app/(terminal)/layout.tsx.
 export const metadata: Metadata = {
-  title: "AIMAG AI Terminal",
-  description: "Professional AI-powered crypto trading terminal",
+  metadataBase: new URL(SITE_URL),
+  title: { default: SITE_NAME, template: `%s | ${SITE_NAME}` },
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export default function RootLayout({

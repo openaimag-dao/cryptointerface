@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExternalLink } from "lucide-react";
@@ -9,6 +10,30 @@ import { SentimentBadge } from "@/components/common/sentiment-badge";
 
 interface ArticlePageProps {
   params: Promise<{ id: string }>;
+}
+
+export async function generateMetadata({ params }: ArticlePageProps): Promise<Metadata> {
+  const { id } = await params;
+  const article = await fetchArticleById(id);
+  if (!article) return {};
+
+  return {
+    title: article.title,
+    description: article.summary,
+    alternates: { canonical: `/article/${article.id}` },
+    openGraph: {
+      type: "article",
+      title: article.title,
+      description: article.summary,
+      publishedTime: article.publishedAt,
+      tags: article.symbols,
+    },
+    twitter: {
+      card: "summary",
+      title: article.title,
+      description: article.summary,
+    },
+  };
 }
 
 export default async function ArticlePage({ params }: ArticlePageProps) {

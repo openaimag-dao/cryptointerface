@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import { PageHeader } from "@/components/common/page-header";
 import { PortalNewsCard } from "@/components/portal/news-card";
 import { Button } from "@/components/ui/button";
@@ -6,6 +8,13 @@ import { searchNews } from "@/services/news-service";
 interface SearchPageProps {
   searchParams: Promise<{ q?: string }>;
 }
+
+// Query-driven results have no stable canonical content, so keep it out of
+// the index while still letting people who land here directly use it.
+export const metadata: Metadata = {
+  title: "Search",
+  robots: { index: false, follow: true },
+};
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const { q } = await searchParams;
