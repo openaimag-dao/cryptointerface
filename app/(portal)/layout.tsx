@@ -3,32 +3,40 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 
 import { PORTAL_TOPICS } from "@/lib/portal-topics";
+import { PORTAL_LANGUAGE_COOKIE, portalStrings, resolvePortalLanguage, topicStrings } from "@/lib/portal-i18n";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
+import { LanguageSwitcher } from "@/components/portal/language-switcher";
+import { PriceTicker } from "@/components/portal/price-ticker";
 
 export default async function PortalLayout({ children }: { children: ReactNode }) {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   const session = token ? await verifySessionToken(token) : null;
-  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  const lang = resolvePortalLanguage(cookieStore.get(PORTAL_LANGUAGE_COOKIE)?.value);
+  const t = portalStrings(lang);
+  const dateLocale = lang === "en" ? "en-US" : lang === "ru" ? "ru-RU" : "kk-KZ";
+  const today = new Date().toLocaleDateString(dateLocale, { weekday: "long", month: "long", day: "numeric" });
 
   return (
     <div className="portal-theme flex min-h-screen flex-col bg-background text-foreground">
+      <PriceTicker />
       <header className="border-b border-border-strong">
-        {/* Utility bar: date + account, small and out of the way — a
-            masthead detail, not the focal point. */}
+        {/* Utility bar: date + language + account, small and out of the
+            way — a masthead detail, not the focal point. */}
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-2 text-xs text-muted-foreground">
           <span>{today}</span>
           <div className="flex items-center gap-4">
+            <LanguageSwitcher current={lang} />
             <Link href="/dashboard" className="transition-colors hover:text-foreground">
-              Terminal ↗
+              {t.navTerminal}
             </Link>
             {session ? (
               <Link href="/account" className="transition-colors hover:text-foreground">
-                Account
+                {t.navAccount}
               </Link>
             ) : (
               <Link href="/login" className="transition-colors hover:text-foreground">
-                Sign in
+                {t.navSignIn}
               </Link>
             )}
           </div>
@@ -39,23 +47,21 @@ export default async function PortalLayout({ children }: { children: ReactNode }
             <Link href="/" className="font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
               AIMAG <span className="text-accent">News</span>
             </Link>
-            <p className="mt-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Crypto · AI · Blockchain · Innovation
-            </p>
+            <p className="mt-1 text-xs uppercase tracking-[0.2em] text-muted-foreground">{t.tagline}</p>
           </div>
         </div>
         <nav className="border-t border-border-strong">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-6 gap-y-2 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {PORTAL_TOPICS.map((topic) => (
               <Link key={topic.slug} href={`/category/${topic.slug}`} className="transition-colors hover:text-accent">
-                {topic.label}
+                {topicStrings(lang, topic.value).label}
               </Link>
             ))}
             <Link href="/trending" className="transition-colors hover:text-accent">
-              Trending
+              {t.navTrending}
             </Link>
             <Link href="/search" className="transition-colors hover:text-accent">
-              Search
+              {t.navSearch}
             </Link>
           </div>
         </nav>
@@ -63,10 +69,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">{children}</main>
       <footer className="border-t border-border-strong px-6 py-8 text-center text-xs text-muted-foreground">
         <p className="font-serif text-sm text-foreground">AIMAG News</p>
-        <p className="mt-2">
-          Crypto, AI, Blockchain &amp; Innovation headlines — aggregated from real sources and classified
-          automatically. Every story links back to its original publisher.
-        </p>
+        <p className="mt-2">{t.footerTagline}</p>
       </footer>
     </div>
   );

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 
 import { PORTAL_TOPICS, portalTopicForSlug } from "@/lib/portal-topics";
+import { PORTAL_LANGUAGE_COOKIE, portalStrings, resolvePortalLanguage, topicStrings } from "@/lib/portal-i18n";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/common/page-header";
 import { PortalNewsCard } from "@/components/portal/news-card";
@@ -24,15 +26,13 @@ export const metadata: Metadata = {
 export default async function TrendingPage({ searchParams }: TrendingPageProps) {
   const { topic: topicSlug } = await searchParams;
   const topic = topicSlug ? portalTopicForSlug(topicSlug) : undefined;
-  const items = await fetchTrendingNews(topic?.value);
+  const lang = resolvePortalLanguage((await cookies()).get(PORTAL_LANGUAGE_COOKIE)?.value);
+  const t = portalStrings(lang);
+  const items = await fetchTrendingNews(topic?.value, 20, lang);
 
   return (
     <div className="space-y-8">
-      <PageHeader
-        title="Trending"
-        description="Ranked by real coverage: how many independent sources reported it and how significant the classifier scored it — not a fabricated view counter."
-        serif
-      />
+      <PageHeader title={t.trendingTitle} description={t.trendingDescription} serif />
 
       <nav className="flex flex-wrap gap-2 text-sm">
         <Link
@@ -44,26 +44,26 @@ export default async function TrendingPage({ searchParams }: TrendingPageProps) 
               : "border-border-subtle text-muted-foreground hover:text-foreground",
           )}
         >
-          All
+          {t.trendingAll}
         </Link>
-        {PORTAL_TOPICS.map((t) => (
+        {PORTAL_TOPICS.map((topicItem) => (
           <Link
-            key={t.slug}
-            href={`/trending?topic=${t.slug}`}
+            key={topicItem.slug}
+            href={`/trending?topic=${topicItem.slug}`}
             className={cn(
               "rounded-full border px-3 py-1 transition-colors",
-              topic?.slug === t.slug
+              topic?.slug === topicItem.slug
                 ? "border-accent/30 bg-accent-dim text-accent"
                 : "border-border-subtle text-muted-foreground hover:text-foreground",
             )}
           >
-            {t.label}
+            {topicStrings(lang, topicItem.value).label}
           </Link>
         ))}
       </nav>
 
       {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nothing trending in the last 48 hours yet. Check back soon.</p>
+        <p className="text-sm text-muted-foreground">{t.trendingEmpty}</p>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {items.map((item, index) => (

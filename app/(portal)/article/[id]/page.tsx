@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ExternalLink, Sparkles } from "lucide-react";
 
 import { timeAgo } from "@/lib/utils";
+import { PORTAL_LANGUAGE_COOKIE, portalStrings, resolvePortalLanguage } from "@/lib/portal-i18n";
 import { fetchArticleById } from "@/services/news-service";
 import { ArticleImage } from "@/components/portal/article-image";
 import { Badge } from "@/components/ui/badge";
@@ -41,14 +43,16 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
 
 export default async function ArticlePage({ params }: ArticlePageProps) {
   const { id } = await params;
-  const article = await fetchArticleById(id);
+  const lang = resolvePortalLanguage((await cookies()).get(PORTAL_LANGUAGE_COOKIE)?.value);
+  const t = portalStrings(lang);
+  const article = await fetchArticleById(id, lang);
   if (!article) notFound();
 
   return (
     <article className="mx-auto max-w-3xl space-y-6">
       <div>
         <Link href="/" className="text-xs text-muted-foreground transition-colors hover:text-accent">
-          ← Back to AIMAG News
+          {t.articleBack}
         </Link>
       </div>
 
@@ -81,16 +85,17 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         <ArticleImage src={article.imageUrl} className="aspect-[16/9] w-full rounded-lg object-cover" />
       ) : null}
 
-      {article.aiSummary ? (
+      {/* AI Summary (Q4) is only ever generated in English, so it's shown
+          only in the English reading mode — a mismatched-language box
+          would read as broken rather than helpful. */}
+      {article.aiSummary && lang === "en" ? (
         <div className="rounded-lg border border-accent/25 bg-accent-dim/40 p-4">
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-accent">
             <Sparkles className="size-3.5" />
-            AI Summary
+            {t.articleAiSummary}
           </span>
           <p className="mt-2 text-sm leading-relaxed text-foreground">{article.aiSummary}</p>
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            Generated from this article by AIMAG&apos;s AI — always verify against the original reporting below.
-          </p>
+          <p className="mt-2 text-[11px] text-muted-foreground">{t.articleAiSummaryDisclaimer}</p>
         </div>
       ) : null}
 
@@ -102,7 +107,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1.5 rounded-md border border-border-strong px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
       >
-        Read the full article at {article.source}
+        {t.articleReadFullAt(article.source)}
         <ExternalLink className="size-3.5" />
       </a>
     </article>

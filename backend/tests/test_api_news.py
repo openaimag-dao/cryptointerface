@@ -16,6 +16,7 @@ from httpx import ASGITransport, AsyncClient
 from app.api.news import router as news_router
 from app.database.session import get_db
 from app.intelligence.llm.news_digest import NewsDigestResult
+from app.services.article_translation_repository import upsert_translation
 from app.services.news_digest_repository import insert_news_digest
 from app.services.news_event_repository import assign_to_event
 from app.services.news_repository import get_article_by_url, insert_article
@@ -75,6 +76,56 @@ async def test_portal_endpoint_rejects_unknown_topic(db_session):
         response = await client.get("/api/news/portal", params={"topic": "SPORTS"})
 
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_portal_endpoint_returns_translated_content_when_lang_given(db_session):
+    await _insert(db_session, url="https://example.com/translated-article", title="English Title")
+    article = await get_article_by_url(db_session, "https://example.com/translated-article")
+    await upsert_translation(db_session, article.id, "ru", "Русский заголовок", "Русское описание")
+
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/portal", params={"lang": "ru"})
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["title"] == "Русский заголовок"
+    assert item["summary"] == "Русское описание"
+
+
+@pytest.mark.asyncio
+async def test_portal_endpoint_falls_back_to_english_when_no_translation_yet(db_session):
+    await _insert(db_session, url="https://example.com/no-translation", title="English Title")
+
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/portal", params={"lang": "ru"})
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["title"] == "English Title"
+
+
+@pytest.mark.asyncio
+async def test_portal_endpoint_falls_back_to_english_for_unrecognized_lang(db_session):
+    await _insert(db_session, url="https://example.com/bad-lang", title="English Title")
+
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/portal", params={"lang": "xx"})
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["title"] == "English Title"
+
+
+@pytest.mark.asyncio
+async def test_get_article_endpoint_returns_translated_content(db_session):
+    await _insert(db_session, url="https://example.com/article-lang", title="English Title")
+    article = await get_article_by_url(db_session, "https://example.com/article-lang")
+    await upsert_translation(db_session, article.id, "kk", "Қазақша тақырып", "Қазақша сипаттама")
+
+    async with await _client(db_session) as client:
+        response = await client.get(f"/api/news/{article.id}", params={"lang": "kk"})
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Қазақша тақырып"
 
 
 @pytest.mark.asyncio

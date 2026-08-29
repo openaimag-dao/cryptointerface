@@ -12,11 +12,14 @@ from app.database.session import AsyncSessionLocal
 from app.intelligence.llm.explanation import build_llm_explanation
 from app.intelligence.llm.news_digest import build_news_digest
 from app.intelligence.llm.news_processing import build_news_processing
+from app.intelligence.llm.news_translation import build_news_translation
 from app.intelligence.macro.service import fetch_and_persist_macro_snapshot
 from app.intelligence.news.service import fetch_and_persist_news
 from app.intelligence.sentiment.engine import compute_sentiment
 from app.intelligence.whales.service import fetch_and_persist_whale_events
 from app.models.ai_processing_log import AIProcessingLog
+from app.models.article_translation import SUPPORTED_TRANSLATION_LANGUAGES
+from app.services.article_translation_repository import get_articles_missing_translation, upsert_translation
 from app.services.entity_repository import link_article_entities
 from app.services.llm_repository import insert_llm_report
 from app.services.news_digest_repository import insert_news_digest
@@ -154,3 +157,39 @@ async def run_ai_news_processing(stop_event: asyncio.Event | None = None) -> Non
         except Exception:  # noqa: BLE001 — one bad cycle must not kill the poller
             logger.warning("news_processing_cycle_failed", exc_info=True)
         await _wait_or_stop(stop_event, settings.ai_processing_interval_seconds)
+
+
+async def run_news_translation(stop_event: asyncio.Event | None = None) -> None:
+    """Backfills `ArticleTranslation` rows for recently-published
+    articles, one language at a time, `TRANSLATION_BATCH_SIZE` articles
+    per language per cycle — same "drain the backlog gradually,
+    oldest-missing-first" shape as `run_ai_news_processing`. No-ops
+    entirely when ANTHROPIC_API_KEY isn't configured, same fail-open
+    reasoning as every other optional-enrichment scheduler here."""
+    stop_event = stop_event or asyncio.Event()
+    while not stop_event.is_set():
+        if not settings.anthropic_api_key:
+            await _wait_or_stop(stop_event, settings.translation_interval_seconds)
+            continue
+
+        for language in SUPPORTED_TRANSLATION_LANGUAGES:
+            try:
+                async with AsyncSessionLocal() as db:
+                    articles = await get_articles_missing_translation(
+                        db, language, limit=settings.translation_batch_size
+                    )
+                    for article in articles:
+                        try:
+                            result = await build_news_translation(article, language)
+                            if result is None:
+                                continue
+                            await upsert_translation(db, article.id, language, result.title, result.summary)
+                        except Exception:  # noqa: BLE001 — one article failing must not stop the batch
+                            logger.warning(
+                                "news_translation_article_failed",
+                                extra={"article_id": article.id, "language": language},
+                                exc_info=True,
+                            )
+            except Exception:  # noqa: BLE001 — one bad cycle must not kill the poller
+                logger.warning("news_translation_cycle_failed", extra={"language": language}, exc_info=True)
+        await _wait_or_stop(stop_event, settings.translation_interval_seconds)

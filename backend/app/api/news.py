@@ -8,9 +8,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db
+from app.models.article_translation import SUPPORTED_TRANSLATION_LANGUAGES, ArticleTranslation
 from app.models.news import NewsArticle
 from app.schemas.news import NewsEventOut, NewsItem, PortalNewsPage
 from app.schemas.news_digest import NewsDigestOut
+from app.services.article_translation_repository import get_translations_for_articles
 from app.services.news_digest_repository import get_latest_news_digest
 from app.services.news_event_repository import get_event_articles, get_event_by_id
 from app.services.news_repository import (
@@ -25,13 +27,33 @@ router = APIRouter(prefix="/api/news", tags=["news"])
 
 PORTAL_TOPICS = {"CRYPTO", "AI", "BLOCKCHAIN", "INNOVATION"}
 
+LANG_DESCRIPTION = "Portal display language: ru or kk. Omit (or en) for the original English."
 
-def to_news_item(article: NewsArticle) -> NewsItem:
+
+def _resolve_lang(lang: str | None) -> str | None:
+    """None means "serve the original English" — also the fallback for
+    an unrecognized value, so a stray `?lang=xx` degrades gracefully
+    instead of 400ing a public page."""
+    return lang if lang in SUPPORTED_TRANSLATION_LANGUAGES else None
+
+
+async def _translations_for(db: AsyncSession, articles: list[NewsArticle], lang: str | None) -> dict:
+    if lang is None:
+        return {}
+    return await get_translations_for_articles(db, [a.id for a in articles], lang)
+
+
+def to_news_item(article: NewsArticle, translation: ArticleTranslation | None = None) -> NewsItem:
+    """`translation`, when given, is a Claude-translated title/summary for
+    this exact article (app/intelligence/llm/news_translation.py) — real
+    translated text, swapped in for the originals. Absent (translation
+    pipeline hasn't reached this article yet, or no language requested)
+    falls back to the original English, never a placeholder."""
     return NewsItem(
         id=str(article.id),
         source=article.source,
-        title=article.title,
-        summary=article.summary,
+        title=translation.title if translation else article.title,
+        summary=translation.summary if translation else article.summary,
         published_at=datetime.fromtimestamp(article.published_at, tz=UTC).isoformat(),
         language=article.language,
         symbols=article.symbols,
@@ -70,6 +92,7 @@ async def search(
     topic: str | None = Query(default=None, description="CRYPTO, AI, BLOCKCHAIN, or INNOVATION"),
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    lang: str | None = Query(default=None, description=LANG_DESCRIPTION),
     db: AsyncSession = Depends(get_db),
 ) -> PortalNewsPage:
     """Real Postgres full-text search (news_repository.py::search_news),
@@ -78,13 +101,18 @@ async def search(
     if topic is not None and topic not in PORTAL_TOPICS:
         raise HTTPException(status_code=400, detail=f"Unknown topic: {topic}. Must be one of {sorted(PORTAL_TOPICS)}")
     articles, total = await search_news(db, q, topic=topic, limit=limit, offset=offset)
-    return PortalNewsPage(items=[to_news_item(a) for a in articles], total=total, limit=limit, offset=offset)
+    lang = _resolve_lang(lang)
+    translations = await _translations_for(db, articles, lang)
+    return PortalNewsPage(
+        items=[to_news_item(a, translations.get(a.id)) for a in articles], total=total, limit=limit, offset=offset
+    )
 
 
 @router.get("/trending", response_model=list[NewsItem])
 async def trending_news(
     topic: str | None = Query(default=None, description="CRYPTO, AI, BLOCKCHAIN, or INNOVATION"),
     limit: int = Query(20, ge=1, le=50),
+    lang: str | None = Query(default=None, description=LANG_DESCRIPTION),
     db: AsyncSession = Depends(get_db),
 ) -> list[NewsItem]:
     """Real trending ranking (news_repository.py::get_trending_news) — the
@@ -94,7 +122,9 @@ async def trending_news(
     if topic is not None and topic not in PORTAL_TOPICS:
         raise HTTPException(status_code=400, detail=f"Unknown topic: {topic}. Must be one of {sorted(PORTAL_TOPICS)}")
     articles = await get_trending_news(db, topic=topic, limit=limit)
-    return [to_news_item(a) for a in articles]
+    lang = _resolve_lang(lang)
+    translations = await _translations_for(db, articles, lang)
+    return [to_news_item(a, translations.get(a.id)) for a in articles]
 
 
 @router.get("/portal", response_model=PortalNewsPage)
@@ -102,6 +132,7 @@ async def portal_news(
     topic: str | None = Query(default=None, description="CRYPTO, AI, BLOCKCHAIN, or INNOVATION"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    lang: str | None = Query(default=None, description=LANG_DESCRIPTION),
     db: AsyncSession = Depends(get_db),
 ) -> PortalNewsPage:
     """Real DB-level pagination for the public news portal — distinct from
@@ -109,7 +140,11 @@ async def portal_news(
     if topic is not None and topic not in PORTAL_TOPICS:
         raise HTTPException(status_code=400, detail=f"Unknown topic: {topic}. Must be one of {sorted(PORTAL_TOPICS)}")
     articles, total = await get_portal_news_page(db, topic=topic, limit=limit, offset=offset)
-    return PortalNewsPage(items=[to_news_item(a) for a in articles], total=total, limit=limit, offset=offset)
+    lang = _resolve_lang(lang)
+    translations = await _translations_for(db, articles, lang)
+    return PortalNewsPage(
+        items=[to_news_item(a, translations.get(a.id)) for a in articles], total=total, limit=limit, offset=offset
+    )
 
 
 @router.get("/digest", response_model=NewsDigestOut)
@@ -154,8 +189,14 @@ async def get_news_event(event_id: int, db: AsyncSession = Depends(get_db)) -> N
 
 
 @router.get("/{article_id}", response_model=NewsItem)
-async def get_article(article_id: int, db: AsyncSession = Depends(get_db)) -> NewsItem:
+async def get_article(
+    article_id: int,
+    lang: str | None = Query(default=None, description=LANG_DESCRIPTION),
+    db: AsyncSession = Depends(get_db),
+) -> NewsItem:
     article = await get_article_by_id(db, article_id)
     if article is None:
         raise HTTPException(status_code=404, detail=f"No article with id {article_id}")
-    return to_news_item(article)
+    lang = _resolve_lang(lang)
+    translations = await _translations_for(db, [article], lang)
+    return to_news_item(article, translations.get(article.id))

@@ -87,6 +87,14 @@ class Settings(BaseSettings):
     ai_processing_interval_seconds: float = 900.0  # 15min
     ai_processing_batch_size: int = 20
 
+    # News Translation (app/intelligence/llm/news_translation.py) — one
+    # Claude call per untranslated article per language per batch, so this
+    # runs on its own slower cadence rather than matching
+    # ai_processing_interval_seconds (translating is a lower-priority
+    # enrichment than the original summary/entities).
+    translation_interval_seconds: float = 1_800.0  # 30min
+    translation_batch_size: int = 10
+
     # Whale Engine (app/intelligence/whales/) — Etherscan free tier (5
     # req/sec, 100k/day, get a key at https://etherscan.io/apis). Leave
     # blank to disable; the poller then simply persists nothing. Only
