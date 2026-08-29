@@ -11,12 +11,16 @@ from app.core.logging import get_logger
 from app.database.session import AsyncSessionLocal
 from app.intelligence.llm.explanation import build_llm_explanation
 from app.intelligence.llm.news_digest import build_news_digest
+from app.intelligence.llm.news_processing import build_news_processing
 from app.intelligence.macro.service import fetch_and_persist_macro_snapshot
 from app.intelligence.news.service import fetch_and_persist_news
 from app.intelligence.sentiment.engine import compute_sentiment
 from app.intelligence.whales.service import fetch_and_persist_whale_events
+from app.models.ai_processing_log import AIProcessingLog
+from app.services.entity_repository import link_article_entities
 from app.services.llm_repository import insert_llm_report
 from app.services.news_digest_repository import insert_news_digest
+from app.services.news_repository import get_unprocessed_articles
 from app.services.sentiment_repository import insert_sentiment_score
 
 logger = get_logger(__name__)
@@ -113,3 +117,40 @@ async def run_news_digest_refresh(stop_event: asyncio.Event | None = None) -> No
             except Exception:  # noqa: BLE001 — one topic failing must not stop the others
                 logger.warning("news_digest_refresh_failed", extra={"topic": topic}, exc_info=True)
         await _wait_or_stop(stop_event, settings.news_digest_interval_seconds)
+
+
+async def run_ai_news_processing(stop_event: asyncio.Event | None = None) -> None:
+    """Backfills `NewsArticle.ai_summary` + entity links for recently-
+    ingested articles, oldest-missing-first, `AI_PROCESSING_BATCH_SIZE`
+    at a time. No-ops entirely (no batch fetch, no per-article logging)
+    when ANTHROPIC_API_KEY isn't configured — same fail-open shape as
+    every other Sprint 4 provider, just checked once per cycle instead of
+    once per article to avoid log noise when the feature is simply off."""
+    stop_event = stop_event or asyncio.Event()
+    while not stop_event.is_set():
+        if not settings.anthropic_api_key:
+            await _wait_or_stop(stop_event, settings.ai_processing_interval_seconds)
+            continue
+
+        try:
+            async with AsyncSessionLocal() as db:
+                articles = await get_unprocessed_articles(db, limit=settings.ai_processing_batch_size)
+                for article in articles:
+                    try:
+                        result = await build_news_processing(article)
+                        if result is None:
+                            db.add(AIProcessingLog(article_id=article.id, stage="summary", status="ERROR"))
+                            await db.commit()
+                            continue
+                        article.ai_summary = result.summary
+                        await db.commit()
+                        await link_article_entities(db, article.id, result.entities)
+                        db.add(AIProcessingLog(article_id=article.id, stage="summary", status="SUCCESS"))
+                        await db.commit()
+                    except Exception:  # noqa: BLE001 — one article failing must not stop the batch
+                        logger.warning(
+                            "news_processing_article_failed", extra={"article_id": article.id}, exc_info=True
+                        )
+        except Exception:  # noqa: BLE001 — one bad cycle must not kill the poller
+            logger.warning("news_processing_cycle_failed", exc_info=True)
+        await _wait_or_stop(stop_event, settings.ai_processing_interval_seconds)

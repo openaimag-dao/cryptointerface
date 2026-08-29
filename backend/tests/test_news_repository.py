@@ -7,6 +7,7 @@ from app.services.news_repository import (
     get_latest_news,
     get_news_snapshot_for_symbol,
     get_portal_news_page,
+    get_unprocessed_articles,
     insert_article,
     search_news,
 )
@@ -153,3 +154,35 @@ async def test_get_article_by_id_returns_the_inserted_article(db_session):
 
     assert found is not None
     assert found.title == "Find Me"
+
+
+@pytest.mark.asyncio
+async def test_get_unprocessed_articles_returns_articles_without_ai_summary(db_session):
+    await _insert(db_session, url="https://example.com/unprocessed")
+
+    unprocessed = await get_unprocessed_articles(db_session)
+
+    assert len(unprocessed) == 1
+    assert unprocessed[0].ai_summary is None
+
+
+@pytest.mark.asyncio
+async def test_get_unprocessed_articles_excludes_already_processed_articles(db_session):
+    await _insert(db_session, url="https://example.com/processed")
+    articles, _ = await get_portal_news_page(db_session, limit=1)
+    articles[0].ai_summary = "Already processed."
+    await db_session.commit()
+
+    unprocessed = await get_unprocessed_articles(db_session)
+
+    assert unprocessed == []
+
+
+@pytest.mark.asyncio
+async def test_get_unprocessed_articles_respects_the_limit(db_session):
+    for i in range(3):
+        await _insert(db_session, url=f"https://example.com/batch-{i}")
+
+    unprocessed = await get_unprocessed_articles(db_session, limit=2)
+
+    assert len(unprocessed) == 2

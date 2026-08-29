@@ -6,9 +6,10 @@ If 5 sources all publish about the same real-world event within a short
 window, this groups their articles under one `NewsEvent` (see
 app/models/news_event.py) instead of the portal showing 5 near-identical
 cards. Matching is title-similarity (Jaccard over normalized word sets)
-within a time window — real entity-based matching lands in Q4 once
-`app/intelligence/llm/news_processing.py` extracts entities; this doesn't
-block on that landing first.
+within a time window. `app/intelligence/llm/news_processing.py` (Q4) now
+extracts entities per article, but matching here is still title-only —
+upgrading to entity-aware matching is future work, not required for this
+to be useful today.
 """
 
 import re
@@ -61,3 +62,29 @@ def find_best_candidate(article: NewsArticle, candidates: list[NewsArticle]) -> 
             best = candidate
             best_score = score
     return best
+
+
+# Weights for compute_importance_score — deliberately simple and auditable
+# rather than tuned: the classifier's impact_score (0-100, keyword-based —
+# see classifier.py) already captures "how big a deal does this look like",
+# and independent-source corroboration is the clearest cheap signal that a
+# story is real/significant rather than one outlet's spin. Capped at 5
+# sources so a 20-source wire-copy story doesn't dominate a 2-source scoop
+# that's actually more novel.
+_IMPACT_WEIGHT = 6.0
+_SOURCE_WEIGHT_PER_ARTICLE = 0.8
+_MAX_SOURCES_COUNTED = 5
+
+
+def compute_importance_score(article_impact_scores: list[float]) -> float:
+    """0-10 scale (see spec section 11's "Importance: 9.4/10") from the
+    grouped event's own articles — no new facts, just a deterministic
+    combination of numbers the classifier and dedup engine already
+    computed. Recomputed every time an article joins or creates an event
+    (app/services/news_event_repository.py), so it grows as more sources
+    corroborate the story."""
+    if not article_impact_scores:
+        return 0.0
+    impact_component = (max(article_impact_scores) / 100.0) * _IMPACT_WEIGHT
+    source_component = min(len(article_impact_scores), _MAX_SOURCES_COUNTED) * _SOURCE_WEIGHT_PER_ARTICLE
+    return round(min(impact_component + source_component, 10.0), 1)

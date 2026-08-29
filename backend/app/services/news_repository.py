@@ -100,6 +100,21 @@ async def get_article_by_url(db: AsyncSession, url: str) -> NewsArticle | None:
     return result.scalars().first()
 
 
+async def get_unprocessed_articles(db: AsyncSession, limit: int = 20) -> list[NewsArticle]:
+    """Recent articles AI News Processing (app/intelligence/llm/
+    news_processing.py) hasn't touched yet — oldest-missing-first, so a
+    backlog drains in ingestion order rather than the same freshest
+    articles winning every cycle."""
+    stmt = (
+        select(NewsArticle)
+        .where(NewsArticle.ai_summary.is_(None))
+        .order_by(NewsArticle.published_at.asc())
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
 async def get_portal_news_page(
     db: AsyncSession, topic: str | None = None, limit: int = 30, offset: int = 0
 ) -> tuple[list[NewsArticle], int]:

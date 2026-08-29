@@ -34,6 +34,7 @@ def to_news_item(article: NewsArticle) -> NewsItem:
         sentiment=article.sentiment,
         category=article.category,
         portal_topic=article.portal_topic,
+        ai_summary=article.ai_summary,
     )
 
 

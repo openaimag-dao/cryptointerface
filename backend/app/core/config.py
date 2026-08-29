@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     # Claude call per portal topic per cycle, so this stays hourly rather
     # than matching news_poll_interval_seconds.
     news_digest_interval_seconds: float = 3_600.0  # 1h
+    # AI News Processing (app/intelligence/llm/news_processing.py) — one
+    # Claude call per unprocessed article per batch, so this runs often
+    # enough to keep the backlog small without hammering the API.
+    ai_processing_interval_seconds: float = 900.0  # 15min
+    ai_processing_batch_size: int = 20
 
     # Whale Engine (app/intelligence/whales/) — Etherscan free tier (5
     # req/sec, 100k/day, get a key at https://etherscan.io/apis). Leave

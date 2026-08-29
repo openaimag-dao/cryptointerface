@@ -4,7 +4,7 @@ app/intelligence/news/dedup.py for the matching logic itself)."""
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.intelligence.news.dedup import TIME_WINDOW_HOURS, find_best_candidate
+from app.intelligence.news.dedup import TIME_WINDOW_HOURS, compute_importance_score, find_best_candidate
 from app.models.news import NewsArticle
 from app.models.news_event import NewsEvent
 
@@ -42,6 +42,12 @@ async def assign_to_event(db: AsyncSession, article: NewsArticle) -> NewsEvent |
         event = await db.get(NewsEvent, match.news_event_id)
         assert event is not None  # FK guarantees this
         article.news_event_id = event.id
+        await db.flush()
+        # Recompute now that a new source corroborates the story — more
+        # independent coverage should be able to raise importance even if
+        # this article's own impact_score is lower than the event's peak.
+        event_articles = await get_event_articles(db, event.id)
+        event.importance_score = compute_importance_score([a.impact_score for a in event_articles])
         await db.commit()
         return event
 
@@ -51,7 +57,7 @@ async def assign_to_event(db: AsyncSession, article: NewsArticle) -> NewsEvent |
     event = NewsEvent(
         title=primary.title,
         portal_topic=primary.portal_topic,
-        importance_score=max(primary.impact_score, secondary.impact_score),
+        importance_score=compute_importance_score([primary.impact_score, secondary.impact_score]),
     )
     db.add(event)
     await db.flush()  # need event.id before it can be a FK target below

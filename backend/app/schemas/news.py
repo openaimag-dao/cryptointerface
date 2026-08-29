@@ -15,6 +15,7 @@ class NewsItem(CamelModel):
     sentiment: Sentiment
     category: str
     portal_topic: str | None
+    ai_summary: str | None
 
 
 class PortalNewsPage(CamelModel):

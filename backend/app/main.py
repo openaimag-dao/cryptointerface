@@ -34,6 +34,7 @@ from app.core.logging import configure_logging, get_logger
 from app.core.redis import close_redis
 from app.database.session import AsyncSessionLocal, dispose_engine, init_models
 from app.intelligence.scheduler.tasks import (
+    run_ai_news_processing,
     run_llm_explanation_refresh,
     run_macro_poller,
     run_news_digest_refresh,
@@ -90,6 +91,7 @@ async def lifespan(app: FastAPI):
     _background_tasks.append(asyncio.create_task(run_sentiment_recompute(stop_event=_stop_event)))
     _background_tasks.append(asyncio.create_task(run_llm_explanation_refresh(stop_event=_stop_event)))
     _background_tasks.append(asyncio.create_task(run_news_digest_refresh(stop_event=_stop_event)))
+    _background_tasks.append(asyncio.create_task(run_ai_news_processing(stop_event=_stop_event)))
 
     yield
 

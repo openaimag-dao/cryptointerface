@@ -553,6 +553,44 @@ the classifier above.
   is Q7 (frontend redesign) work; this phase is the grouping engine and
   its API, not yet the visual treatment.
 
+## News Platform: AI processing (summaries, entities, importance)
+
+`app/intelligence/llm/news_processing.py` narrates one article at a time
+into an original summary and extracts named entities — same discipline as
+the LLM Explanation Layer / News Digest above: Claude is given the
+article's own title + RSS summary as the only facts, forced (via
+`tool_choice`) through a fixed JSON schema, system prompt explicitly
+forbids inventing anything not present in the input.
+
+- **Runs on its own schedule** (`run_ai_news_processing`,
+  `AI_PROCESSING_INTERVAL_SECONDS` — 15min default), not inline during
+  RSS ingestion — same reasoning as the digest: a poll cycle can pull
+  dozens of articles, and blocking it on a Claude call per article would
+  make ingestion slow and expensive. Processes up to
+  `AI_PROCESSING_BATCH_SIZE` (20) oldest-unprocessed articles
+  (`NewsArticle.ai_summary IS NULL`) per cycle, so a backlog drains
+  gradually rather than needing to catch up all at once.
+- **No-ops entirely** when `ANTHROPIC_API_KEY` isn't configured — no
+  batch fetch, no per-article log spam, checked once per cycle. A
+  per-article upstream error still logs to `ai_processing_logs`
+  (`app/models/ai_processing_log.py`) and moves on to the next article;
+  one bad article never stalls the batch.
+- **Entities** (`app/models/entity.py` — COMPANY/PERSON/CRYPTOCURRENCY/
+  PROTOCOL/COUNTRY/TECHNOLOGY) upsert by name-derived slug
+  (`app/services/entity_repository.py`), so "Bitcoin" mentioned across
+  hundreds of articles resolves to one row, linked via `ArticleEntity`.
+  Real entity-based dedup matching (vs. the title-only matching in
+  "News Platform: deduplication" above) is future work.
+- **Importance scoring**: `app/intelligence/news/dedup.py::
+  compute_importance_score` — a deterministic 0-10 combination of the
+  classifier's `impact_score` and independent-source count (capped at 5
+  sources), recomputed on `NewsEvent` every time an article joins or
+  creates the event. No new facts, just numbers the classifier and dedup
+  engine already computed.
+- `NewsItem.aiSummary` (API) is null until a background cycle processes
+  that article — the frontend should fall back to the raw `summary` field
+  when it's null, same as it already does before any processing has run.
+
 ## News Platform: real user accounts
 
 Real accounts (`app/services/auth_service.py`, `app/api/auth.py`,

@@ -21,3 +21,12 @@ def slugify(title: str, url: str) -> str:
         base = "article"
     suffix = hashlib.sha1(url.encode("utf-8")).hexdigest()[:8]
     return f"{base}-{suffix}"
+
+
+def simple_slugify(text: str) -> str:
+    """No uniqueness suffix — for names that are naturally stable and
+    reused across many rows (e.g. `Entity.name`, `Author.name`), unlike
+    `slugify()`'s per-article URLs. "Bitcoin" and "bitcoin" collapse to
+    the same slug on purpose, which is how entity dedup by name works."""
+    base = _NON_ALNUM_RE.sub("-", text.lower()).strip("-")[:_MAX_SLUG_TITLE_LENGTH].strip("-")
+    return base or "entity"
