@@ -30,3 +30,12 @@ export async function fetchArticleById(id: string): Promise<NewsItem | null> {
     return null;
   }
 }
+
+export async function searchNews(query: string, limit = 30): Promise<NewsItem[]> {
+  try {
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    return await apiFetch<NewsItem[]>(`/api/news/search?${params.toString()}`);
+  } catch {
+    return [];
+  }
+}

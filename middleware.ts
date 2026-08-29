@@ -1,26 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// The terminal/dashboard is a private tool, not part of the public news
-// portal. Route groups like (terminal) don't appear in the URL, so the
-// protected paths are listed explicitly here — this must stay in sync with
-// app/(terminal)'s subdirectories.
-const PROTECTED_PATH_PREFIXES = [
-  "/dashboard",
-  "/ai-chat",
-  "/assets",
-  "/backtesting",
-  "/liquidations",
-  "/macro",
-  "/markets",
-  "/news",
-  "/portfolio",
-  "/sentiment",
-  "/settings",
-  "/signals",
-  "/whales",
-];
-
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let mismatch = 0;
@@ -77,6 +57,25 @@ export function middleware(request: NextRequest): NextResponse {
   return NextResponse.next();
 }
 
+// The terminal/dashboard is a private tool, not part of the public news
+// portal. Route groups like (terminal) don't appear in the URL, so the
+// protected paths are listed explicitly here — this must stay in sync with
+// app/(terminal)'s subdirectories. Next.js statically analyzes this config
+// at build time, so the matcher has to be a literal array (no .map()).
 export const config = {
-  matcher: PROTECTED_PATH_PREFIXES.map((prefix) => `${prefix}/:path*`),
+  matcher: [
+    "/dashboard/:path*",
+    "/ai-chat/:path*",
+    "/assets/:path*",
+    "/backtesting/:path*",
+    "/liquidations/:path*",
+    "/macro/:path*",
+    "/markets/:path*",
+    "/news/:path*",
+    "/portfolio/:path*",
+    "/sentiment/:path*",
+    "/settings/:path*",
+    "/signals/:path*",
+    "/whales/:path*",
+  ],
 };
