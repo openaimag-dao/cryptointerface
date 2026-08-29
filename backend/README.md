@@ -330,14 +330,16 @@ returns `float | None` and never raises), and it starts showing up in
 
 ### News Engine
 
-Aggregates 3 RSS sources (CoinDesk, Cointelegraph, Decrypt —
-`app/intelligence/news/sources.py`) on `NEWS_POLL_INTERVAL_SECONDS`
-(default 10min, no rate-limit concern like Alpha Vantage). Each article
-is classified once at ingest time by a **deterministic keyword
-classifier** (`classifier.py`) — not an LLM call per article: a poll
-cycle can pull dozens of articles across sources, and running each
-through Claude would be slow and turn every poll into a pile of billed
-API calls for a rough directional read. The classifier produces:
+Aggregates 9 RSS sources (`app/intelligence/news/sources.py`) on
+`NEWS_POLL_INTERVAL_SECONDS` (default 10min, no rate-limit concern like
+Alpha Vantage): CoinDesk, Cointelegraph, Decrypt, The Block, and
+CryptoSlate for crypto; TechCrunch AI and VentureBeat AI for AI;
+TechCrunch and Wired for general innovation. Each article is classified
+once at ingest time by a **deterministic keyword classifier**
+(`classifier.py`) — not an LLM call per article: a poll cycle can pull
+dozens of articles across sources, and running each through Claude would
+be slow and turn every poll into a pile of billed API calls for a rough
+directional read. The classifier produces:
 
 - `symbols` — which watchlist assets are mentioned (name/ticker alias
   matching, e.g. "Bitcoin" or "BTC" -> `BTC`)
@@ -346,6 +348,13 @@ API calls for a rough directional read. The classifier produces:
 - `impact_score` (0-100) — base score + bonus per high-impact keyword
   (SEC, ETF, hack, bankruptcy, ...) + bonus per symbol mentioned
 - `category` (`Security`/`Regulation`/`Institutional`/`DeFi`/`Technology`/`Market`)
+  — market-structure tagging, used only by the terminal's News tab
+- `portal_topic` (`CRYPTO`/`AI`/`BLOCKCHAIN`/`INNOVATION`) — a second,
+  independent classification (`classify_portal_topic()`) for the public
+  News Portal's category pages; see "News Portal (Public)" below.
+  Deliberately kept separate from `category` so nothing about the public
+  portal can ever influence `score_news()`'s `NewsSnapshot` input, which
+  only reads `article_count`/`avg_sentiment_score`/`avg_impact`.
 
 Articles persist to a `news` table (`app/models/news.py`), deduped on
 `url` (`ON CONFLICT DO NOTHING` — RSS feeds re-serve the same articles on
@@ -357,9 +366,9 @@ weighted by `impact_score`. `app/ai_engine/scoring/news.py::score_news()`
 reads that snapshot and now carries real weight (`0.08`) in
 `market_score.py`'s `FACTOR_WEIGHTS`, up from the Sprint 3 stub's `0.00`.
 
-**To add a new news source**: add one `NewsSourceDef` (RSS URL) to
-`app/intelligence/news/sources.py`. Nothing else needs to change —
-`service.py` iterates the registry on every poll cycle.
+**To add a new news source**: add one `NewsSourceDef` (RSS URL +
+`default_topic`) to `app/intelligence/news/sources.py`. Nothing else
+needs to change — `service.py` iterates the registry on every poll cycle.
 
 ### Whale Engine
 
@@ -458,6 +467,7 @@ crashing the loop:
 | `run_whale_poller` | `WHALE_POLL_INTERVAL_SECONDS` | 5min |
 | `run_sentiment_recompute` (every watchlist symbol) | `SENTIMENT_RECOMPUTE_INTERVAL_SECONDS` | 5min |
 | `run_llm_explanation_refresh` (`LLM_EXPLANATION_ANCHOR_SYMBOL` only) | `LLM_EXPLANATION_INTERVAL_SECONDS` | 30min |
+| `run_news_digest_refresh` (every portal topic) | `NEWS_DIGEST_INTERVAL_SECONDS` | 1h |
 
 The LLM refresh only runs for one configurable "anchor" symbol (default
 `BTCUSDT`) — that's what feeds `/api/dashboard/intelligence`'s cached
@@ -474,10 +484,45 @@ symbol, on every request.
 | `GET /api/news?limit=&symbol=&category=` | Real, filterable list |
 | `GET /api/news/latest?limit=` | Real, most recent N articles across all sources |
 | `GET /api/news/search?q=&limit=` | Real, title/summary keyword search |
+| `GET /api/news/portal?topic=&limit=&offset=` | Real, DB-paginated listing for the public News Portal (see below) |
+| `GET /api/news/{id}` | Real, single article by id |
+| `GET /api/news/digest?topic=` | Real; reads the scheduler's latest AI-narrated digest for that topic (never calls Claude inline) |
 | `GET /api/whales/transactions?count=&asset=` | Real, most recent tracked transfers (ETH/LINK only) |
 | `GET /api/sentiment?symbol=&interval=` | Real, computes + persists on every call |
 | `GET /api/llm/explanation/{symbol}?interval=` | Real, computes + persists live |
 | `GET /api/dashboard/intelligence?symbol=&interval=` | Real; `aiExplanation` reads the scheduler's cached anchor-symbol report (fast enough to poll) |
+
+## News Portal (Public)
+
+A public, SEO-indexable news portal sits alongside the private terminal
+in the same Next.js app (new routes, not a separate app — see the
+frontend section below), built entirely from the News Engine's real
+ingested articles above. Nothing about it feeds back into the AI
+Decision Engine.
+
+- **Content**: the 9 RSS sources' `portal_topic` classification
+  (CRYPTO/AI/BLOCKCHAIN/INNOVATION) drives the portal's category pages —
+  see "News Engine" above for why this is a field separate from
+  `category`.
+- **AI Digest**: `app/intelligence/llm/news_digest.py` narrates each
+  topic's 15 most recent real articles into a short summary + highlights,
+  using the same discipline as the LLM Explanation Layer above — Claude
+  is given the real articles as structured facts and forced (via
+  `tool_choice`) through a fixed JSON schema; the system prompt
+  explicitly forbids inventing facts, numbers, or events not present in
+  the input. Generated on a schedule (`run_news_digest_refresh`, hourly
+  by default), not per request — `GET /api/news/digest` only ever reads
+  the latest stored row, so the portal stays cheap to serve regardless of
+  traffic. No `ANTHROPIC_API_KEY` configured, or an upstream error, falls
+  back to a clearly-labeled message with a real `article_count` — never
+  an exception.
+- **Access**: the portal is fully public. The terminal (everything under
+  the frontend's `(terminal)` route group) is gated by HTTP Basic Auth in
+  the frontend's `middleware.ts` — see the frontend README/section below
+  for `TERMINAL_BASIC_AUTH_USER`/`TERMINAL_BASIC_AUTH_PASSWORD`.
+- **SEO**: `app/sitemap.ts`/`app/robots.ts` (frontend) list the portal's
+  routes and the most recent 300 articles, and disallow every terminal
+  route — see the frontend README section.
 
 ## Backtesting Engine (Sprint 5)
 

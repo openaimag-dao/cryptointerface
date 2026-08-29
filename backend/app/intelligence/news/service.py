@@ -7,7 +7,7 @@ blocks the others (see `fetcher.py`).
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.intelligence.news.classifier import classify
+from app.intelligence.news.classifier import classify, classify_portal_topic
 from app.intelligence.news.fetcher import fetch_source
 from app.intelligence.news.sources import NEWS_SOURCES
 from app.services.news_repository import insert_article
@@ -23,6 +23,7 @@ async def fetch_and_persist_news(db: AsyncSession) -> int:
         entries = await fetch_source(source)
         for entry in entries:
             classification = classify(entry.title, entry.summary)
+            portal_topic = classify_portal_topic(f"{entry.title} {entry.summary}", source.default_topic)
             inserted = await insert_article(
                 db,
                 source=entry.source,
@@ -35,6 +36,7 @@ async def fetch_and_persist_news(db: AsyncSession) -> int:
                 impact_score=classification.impact_score,
                 sentiment=classification.sentiment,
                 category=classification.category,
+                portal_topic=portal_topic,
             )
             if inserted:
                 new_count += 1

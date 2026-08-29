@@ -10,17 +10,20 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.database.session import AsyncSessionLocal
 from app.intelligence.llm.explanation import build_llm_explanation
+from app.intelligence.llm.news_digest import build_news_digest
 from app.intelligence.macro.service import fetch_and_persist_macro_snapshot
 from app.intelligence.news.service import fetch_and_persist_news
 from app.intelligence.sentiment.engine import compute_sentiment
 from app.intelligence.whales.service import fetch_and_persist_whale_events
 from app.services.llm_repository import insert_llm_report
+from app.services.news_digest_repository import insert_news_digest
 from app.services.sentiment_repository import insert_sentiment_score
 
 logger = get_logger(__name__)
 settings = get_settings()
 
 DEFAULT_INTERVAL = "1h"
+PORTAL_TOPICS = ["CRYPTO", "AI", "BLOCKCHAIN", "INNOVATION"]
 
 
 async def _wait_or_stop(stop_event: asyncio.Event, interval_seconds: float) -> None:
@@ -93,3 +96,20 @@ async def run_llm_explanation_refresh(stop_event: asyncio.Event | None = None) -
         except Exception:  # noqa: BLE001
             logger.warning("llm_explanation_refresh_failed", extra={"symbol": symbol}, exc_info=True)
         await _wait_or_stop(stop_event, settings.llm_explanation_interval_seconds)
+
+
+async def run_news_digest_refresh(stop_event: asyncio.Event | None = None) -> None:
+    """Refreshes the AI-narrated digest for every portal topic. One bad
+    topic (e.g. no articles ingested yet) must not stop the others — same
+    per-item try/except shape as `run_sentiment_recompute`."""
+    stop_event = stop_event or asyncio.Event()
+    while not stop_event.is_set():
+        for topic in PORTAL_TOPICS:
+            try:
+                async with AsyncSessionLocal() as db:
+                    digest = await build_news_digest(db, topic)
+                    if digest is not None:
+                        await insert_news_digest(db, digest)
+            except Exception:  # noqa: BLE001 — one topic failing must not stop the others
+                logger.warning("news_digest_refresh_failed", extra={"topic": topic}, exc_info=True)
+        await _wait_or_stop(stop_event, settings.news_digest_interval_seconds)

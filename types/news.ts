@@ -7,6 +7,8 @@ import type { Sentiment } from "./market";
  * ingest time (app/intelligence/news/classifier.py) — no LLM call per
  * article.
  */
+export type PortalTopic = "CRYPTO" | "AI" | "BLOCKCHAIN" | "INNOVATION";
+
 export interface NewsItem {
   id: string;
   source: string;
@@ -19,4 +21,25 @@ export interface NewsItem {
   impactScore: number;
   sentiment: Sentiment;
   category: string;
+  portalTopic: PortalTopic | null;
+}
+
+export interface PortalNewsPage {
+  items: NewsItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Generated on a schedule by the backend from real ingested articles for
+ * one topic (see backend/app/intelligence/llm/news_digest.py) — narration
+ * only, every claim is grounded in the articles it was given.
+ */
+export interface NewsDigest {
+  topic: PortalTopic;
+  summary: string;
+  highlights: string[];
+  articleCount: number;
+  generatedAt: string;
 }
