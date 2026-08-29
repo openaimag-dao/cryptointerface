@@ -9,9 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db
 from app.models.news import NewsArticle
-from app.schemas.news import NewsItem, PortalNewsPage
+from app.schemas.news import NewsEventOut, NewsItem, PortalNewsPage
 from app.schemas.news_digest import NewsDigestOut
 from app.services.news_digest_repository import get_latest_news_digest
+from app.services.news_event_repository import get_event_articles, get_event_by_id
 from app.services.news_repository import get_article_by_id, get_latest_news, get_portal_news_page, search_news
 
 router = APIRouter(prefix="/api/news", tags=["news"])
@@ -98,6 +99,24 @@ async def get_news_digest(
         highlights=digest.highlights,
         article_count=digest.article_count,
         generated_at=digest.created_at.isoformat(),
+    )
+
+
+@router.get("/events/{event_id}", response_model=NewsEventOut)
+async def get_news_event(event_id: int, db: AsyncSession = Depends(get_db)) -> NewsEventOut:
+    """Multi-source coverage of one deduplicated event (see
+    app/intelligence/news/dedup.py) — the grouped articles, earliest
+    first."""
+    event = await get_event_by_id(db, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail=f"No event with id {event_id}")
+    articles = await get_event_articles(db, event_id)
+    return NewsEventOut(
+        id=str(event.id),
+        title=event.title,
+        portal_topic=event.portal_topic,
+        importance_score=round(event.importance_score, 1),
+        articles=[to_news_item(a) for a in articles],
     )
 
 

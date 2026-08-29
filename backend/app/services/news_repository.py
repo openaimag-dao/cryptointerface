@@ -94,6 +94,12 @@ async def get_article_by_id(db: AsyncSession, article_id: int) -> NewsArticle | 
     return await db.get(NewsArticle, article_id)
 
 
+async def get_article_by_url(db: AsyncSession, url: str) -> NewsArticle | None:
+    stmt = select(NewsArticle).where(NewsArticle.url == url)
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
 async def get_portal_news_page(
     db: AsyncSession, topic: str | None = None, limit: int = 30, offset: int = 0
 ) -> tuple[list[NewsArticle], int]:

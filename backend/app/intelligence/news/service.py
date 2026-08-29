@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.intelligence.news.classifier import classify, classify_portal_topic
 from app.intelligence.news.fetcher import fetch_source
-from app.services.news_repository import insert_article
+from app.services.news_event_repository import assign_to_event
+from app.services.news_repository import get_article_by_url, insert_article
 from app.services.news_source_repository import get_enabled_sources, record_fetch_result
 
 logger = get_logger(__name__)
@@ -60,6 +61,12 @@ async def fetch_and_persist_news(db: AsyncSession) -> int:
             )
             if inserted:
                 source_new_count += 1
+                # Only newly-inserted articles need dedup — one that already
+                # existed (ON CONFLICT DO NOTHING) was already processed on
+                # an earlier poll cycle.
+                new_article = await get_article_by_url(db, entry.url)
+                if new_article is not None:
+                    await assign_to_event(db, new_article)
 
         new_count += source_new_count
         await record_fetch_result(

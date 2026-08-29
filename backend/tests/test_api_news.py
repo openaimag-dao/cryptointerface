@@ -17,7 +17,8 @@ from app.api.news import router as news_router
 from app.database.session import get_db
 from app.intelligence.llm.news_digest import NewsDigestResult
 from app.services.news_digest_repository import insert_news_digest
-from app.services.news_repository import insert_article
+from app.services.news_event_repository import assign_to_event
+from app.services.news_repository import get_article_by_url, insert_article
 
 
 def _app(db_session):
@@ -138,6 +139,37 @@ async def test_digest_endpoint_rejects_unknown_topic(db_session):
 async def test_digest_endpoint_404_when_none_generated_yet(db_session):
     async with await _client(db_session) as client:
         response = await client.get("/api/news/digest", params={"topic": "AI"})
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_news_event_returns_grouped_articles(db_session):
+    await _insert(db_session, url="https://example.com/event-a", title="OpenAI launches new flagship AI model")
+    await _insert(
+        db_session, url="https://example.com/event-b", title="OpenAI unveils new flagship AI model to the public"
+    )
+    article_a = await get_article_by_url(db_session, "https://example.com/event-a")
+    article_b = await get_article_by_url(db_session, "https://example.com/event-b")
+    event = await assign_to_event(db_session, article_a)
+    await assign_to_event(db_session, article_b)
+
+    async with await _client(db_session) as client:
+        response = await client.get(f"/api/news/events/{event.id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["articles"]) == 2
+    assert {a["title"] for a in body["articles"]} == {
+        "OpenAI launches new flagship AI model",
+        "OpenAI unveils new flagship AI model to the public",
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_news_event_404_for_unknown_id(db_session):
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/events/999999")
 
     assert response.status_code == 404
 

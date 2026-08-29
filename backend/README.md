@@ -525,6 +525,34 @@ Decision Engine.
   routes and the most recent 300 articles, and disallow every terminal
   route — see the frontend README section.
 
+## News Platform: deduplication
+
+When multiple sources cover the same real-world event, `app/intelligence/
+news/dedup.py` groups their articles under one `NewsEvent`
+(`app/models/news_event.py`) instead of the portal showing near-identical
+cards side by side — same deterministic, no-LLM-per-article philosophy as
+the classifier above.
+
+- **Matching**: Jaccard similarity over normalized title word sets
+  (lowercased, punctuation stripped, common stopwords removed) — two
+  articles at or above `SIMILARITY_THRESHOLD` (0.5) within
+  `TIME_WINDOW_HOURS` (48h) of each other, in the same `portal_topic`,
+  are treated as the same event. Real entity-based matching is Q4 work
+  (once `app/intelligence/llm/news_processing.py` extracts entities) —
+  this doesn't block on that landing first.
+- **Grouping**: `app/services/news_event_repository.py::assign_to_event`
+  runs once per newly-inserted article (`fetch_and_persist_news`, after
+  `insert_article` confirms a genuine insert, not a dupe-on-URL). If the
+  best match already belongs to an event, the new article joins it;
+  otherwise a new `NewsEvent` is created from the two, anchored on
+  whichever published first (`primary_article_id`). An article that
+  matches nothing stays ungrouped — a "solo" story, not an error.
+- **API**: `GET /api/news/events/{id}` returns the event plus every
+  grouped article, earliest first. The portal UI surfacing multi-source
+  event cards (the "NEWS EVENT — Sources: Reuters, TechCrunch, ..." view)
+  is Q7 (frontend redesign) work; this phase is the grouping engine and
+  its API, not yet the visual treatment.
+
 ## News Platform: real user accounts
 
 Real accounts (`app/services/auth_service.py`, `app/api/auth.py`,

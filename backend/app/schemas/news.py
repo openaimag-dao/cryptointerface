@@ -22,3 +22,15 @@ class PortalNewsPage(CamelModel):
     total: int
     limit: int
     offset: int
+
+
+class NewsEventOut(CamelModel):
+    """Multi-source coverage of one real-world event, grouped by
+    app/intelligence/news/dedup.py. `articles` is ordered earliest-first;
+    the first entry is the primary/anchor article."""
+
+    id: str
+    title: str
+    portal_topic: str | None
+    importance_score: float
+    articles: list[NewsItem]

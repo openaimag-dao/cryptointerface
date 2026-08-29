@@ -93,6 +93,46 @@ async def test_fetch_and_persist_news_records_fetch_result_per_source(db_session
 
 
 @pytest.mark.asyncio
+async def test_fetch_and_persist_news_groups_multi_source_coverage_into_one_event(db_session, monkeypatch):
+    source_a = NewsSource(source_key="wire-a", name="Wire A", rss_url="https://example.com/wire-a")
+    source_b = NewsSource(source_key="wire-b", name="Wire B", rss_url="https://example.com/wire-b")
+    db_session.add_all([source_a, source_b])
+    await db_session.commit()
+
+    async def fake_fetch_source(source_def):
+        if source_def.id == "wire-a":
+            return [_entry("https://example.com/wire-a/1", title="OpenAI launches new flagship AI model")]
+        return [_entry("https://example.com/wire-b/1", title="OpenAI unveils new flagship AI model to the public")]
+
+    monkeypatch.setattr(service, "fetch_source", fake_fetch_source)
+    await fetch_and_persist_news(db_session)
+
+    articles = await get_latest_news(db_session, limit=10)
+    assert len(articles) == 2
+    assert articles[0].news_event_id is not None
+    assert articles[0].news_event_id == articles[1].news_event_id
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_persist_news_leaves_unrelated_articles_ungrouped(db_session, monkeypatch):
+    source = NewsSource(source_key="solo", name="Solo", rss_url="https://example.com/solo")
+    db_session.add(source)
+    await db_session.commit()
+
+    async def fake_fetch_source(source_def):
+        return [
+            _entry("https://example.com/solo/1", title="OpenAI launches new flagship AI model"),
+            _entry("https://example.com/solo/2", title="Robotics startup raises Series A funding"),
+        ]
+
+    monkeypatch.setattr(service, "fetch_source", fake_fetch_source)
+    await fetch_and_persist_news(db_session)
+
+    articles = await get_latest_news(db_session, limit=10)
+    assert all(a.news_event_id is None for a in articles)
+
+
+@pytest.mark.asyncio
 async def test_fetch_and_persist_news_records_error_without_stopping_other_sources(db_session, monkeypatch):
     failing = NewsSource(source_key="failing", name="Failing", rss_url="https://example.com/failing")
     healthy = NewsSource(source_key="healthy", name="Healthy", rss_url="https://example.com/healthy")
