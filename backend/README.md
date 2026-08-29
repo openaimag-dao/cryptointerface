@@ -517,12 +517,222 @@ Decision Engine.
   back to a clearly-labeled message with a real `article_count` — never
   an exception.
 - **Access**: the portal is fully public. The terminal (everything under
-  the frontend's `(terminal)` route group) is gated by HTTP Basic Auth in
-  the frontend's `middleware.ts` — see the frontend README/section below
-  for `TERMINAL_BASIC_AUTH_USER`/`TERMINAL_BASIC_AUTH_PASSWORD`.
+  the frontend's `(terminal)` route group, plus `/saved`/`/watchlist`/
+  `/account`) requires a real logged-in session — see "News Platform:
+  real user accounts" below and the frontend README's `middleware.ts`
+  section.
 - **SEO**: `app/sitemap.ts`/`app/robots.ts` (frontend) list the portal's
   routes and the most recent 300 articles, and disallow every terminal
   route — see the frontend README section.
+
+## News Platform: deduplication
+
+When multiple sources cover the same real-world event, `app/intelligence/
+news/dedup.py` groups their articles under one `NewsEvent`
+(`app/models/news_event.py`) instead of the portal showing near-identical
+cards side by side — same deterministic, no-LLM-per-article philosophy as
+the classifier above.
+
+- **Matching**: Jaccard similarity over normalized title word sets
+  (lowercased, punctuation stripped, common stopwords removed) — two
+  articles at or above `SIMILARITY_THRESHOLD` (0.5) within
+  `TIME_WINDOW_HOURS` (48h) of each other, in the same `portal_topic`,
+  are treated as the same event. Real entity-based matching is Q4 work
+  (once `app/intelligence/llm/news_processing.py` extracts entities) —
+  this doesn't block on that landing first.
+- **Grouping**: `app/services/news_event_repository.py::assign_to_event`
+  runs once per newly-inserted article (`fetch_and_persist_news`, after
+  `insert_article` confirms a genuine insert, not a dupe-on-URL). If the
+  best match already belongs to an event, the new article joins it;
+  otherwise a new `NewsEvent` is created from the two, anchored on
+  whichever published first (`primary_article_id`). An article that
+  matches nothing stays ungrouped — a "solo" story, not an error.
+- **API**: `GET /api/news/events/{id}` returns the event plus every
+  grouped article, earliest first. The portal UI surfacing multi-source
+  event cards (the "NEWS EVENT — Sources: Reuters, TechCrunch, ..." view)
+  is Q7 (frontend redesign) work; this phase is the grouping engine and
+  its API, not yet the visual treatment.
+
+## News Platform: AI processing (summaries, entities, importance)
+
+`app/intelligence/llm/news_processing.py` narrates one article at a time
+into an original summary and extracts named entities — same discipline as
+the LLM Explanation Layer / News Digest above: Claude is given the
+article's own title + RSS summary as the only facts, forced (via
+`tool_choice`) through a fixed JSON schema, system prompt explicitly
+forbids inventing anything not present in the input.
+
+- **Runs on its own schedule** (`run_ai_news_processing`,
+  `AI_PROCESSING_INTERVAL_SECONDS` — 15min default), not inline during
+  RSS ingestion — same reasoning as the digest: a poll cycle can pull
+  dozens of articles, and blocking it on a Claude call per article would
+  make ingestion slow and expensive. Processes up to
+  `AI_PROCESSING_BATCH_SIZE` (20) oldest-unprocessed articles
+  (`NewsArticle.ai_summary IS NULL`) per cycle, so a backlog drains
+  gradually rather than needing to catch up all at once.
+- **No-ops entirely** when `ANTHROPIC_API_KEY` isn't configured — no
+  batch fetch, no per-article log spam, checked once per cycle. A
+  per-article upstream error still logs to `ai_processing_logs`
+  (`app/models/ai_processing_log.py`) and moves on to the next article;
+  one bad article never stalls the batch.
+- **Entities** (`app/models/entity.py` — COMPANY/PERSON/CRYPTOCURRENCY/
+  PROTOCOL/COUNTRY/TECHNOLOGY) upsert by name-derived slug
+  (`app/services/entity_repository.py`), so "Bitcoin" mentioned across
+  hundreds of articles resolves to one row, linked via `ArticleEntity`.
+  Real entity-based dedup matching (vs. the title-only matching in
+  "News Platform: deduplication" above) is future work.
+- **Importance scoring**: `app/intelligence/news/dedup.py::
+  compute_importance_score` — a deterministic 0-10 combination of the
+  classifier's `impact_score` and independent-source count (capped at 5
+  sources), recomputed on `NewsEvent` every time an article joins or
+  creates the event. No new facts, just numbers the classifier and dedup
+  engine already computed.
+- `NewsItem.aiSummary` (API) is null until a background cycle processes
+  that article — the frontend should fall back to the raw `summary` field
+  when it's null, same as it already does before any processing has run.
+
+## News Platform: editorial workflow + admin panel
+
+`app/api/admin.py` — moderation endpoints for `NewsArticle.editorial_status`
+(`app/models/news.py::EDITORIAL_STATUSES` — IMPORTED, PROCESSING,
+PENDING_REVIEW, APPROVED, PUBLISHED, REJECTED, ARCHIVED). Every route on
+the router requires `role="admin"` (`Depends(get_current_admin_user)`,
+`app/api/deps.py`), applied once at the router level rather than per
+endpoint.
+
+- `GET /api/admin/news?status=PENDING_REVIEW&limit=&offset=` — paginated
+  moderation queue for one status (`app/services/news_repository.py::
+  get_articles_by_editorial_status`), 400 for an unrecognized status.
+- `GET /api/admin/news/counts` — one tally per status
+  (`get_editorial_status_counts`) for the admin overview screen.
+- `PATCH /api/admin/news/{id}` — edit `title`/`summary`/`category`/
+  `portalTopic`/`editorialStatus` (all fields optional, only supplied
+  ones are changed); 404 for an unknown article id, 400 for an
+  unrecognized `editorialStatus`.
+
+**Becoming an admin is deliberately not self-service.** Registration
+(`POST /api/auth/register`) always creates `role="user"`; there is no API
+path to role="admin" — `get_current_admin_user` re-checks the
+DB-persisted role on every request (not the JWT's embedded role, which
+could be stale after a demotion). The only way to create the first admin
+is the one-off script:
+
+```
+cd backend && .venv/bin/python -m scripts.promote_to_admin someone@example.com
+```
+
+The user must already be registered; the script exits 1 with a message if
+the email isn't found.
+
+## News Platform: real article images
+
+`NewsArticle.image_url` (nullable) is a real image URL pulled straight
+from the RSS entry itself — `app/intelligence/news/fetcher.py::
+_entry_image_url` checks Media RSS's `<media:content>`/`<media:thumbnail>`
+(`feedparser`'s `media_content`/`media_thumbnail`) and then a plain
+`<enclosure>` link with an `image/*` type, in that priority order. Never
+fabricated or guessed, and never a placeholder graphic — most sources do
+populate one of these (verified against Cointelegraph, Decrypt, and
+CryptoSlate's real feeds), but a source that genuinely doesn't include one
+just leaves this null, and the frontend renders a text-only card in that
+case (`components/portal/news-card.tsx`).
+
+## News Platform: source management + ingestion monitoring + multilingual readiness
+
+`GET /api/admin/sources` / `PATCH /api/admin/sources/{id}` — the
+DB-backed source registry (`app/models/news_source.py`, seeded once from
+`app/intelligence/news/sources.py::NEWS_SOURCES`) is now admin-editable:
+toggling `enabled` or `auto_publish`, or adjusting `trust_score`/
+`language`/`default_topic`/`rss_url`, takes effect on the very next poll
+cycle (`app/intelligence/news/service.py::fetch_and_persist_news` reads
+this table, not the static list) — no deploy needed. `source_key` and the
+rolling health fields (`last_fetched_at`/`last_status`/
+`articles_imported_count`) stay read-only —
+`app/services/news_source_repository.py::_EDITABLE_SOURCE_FIELDS` is the
+allowlist enforcing that.
+
+`GET /api/admin/fetch-logs` — every RSS poll attempt is logged
+(`NewsFetchLog`, written by `record_fetch_result` regardless of
+success/failure), so a persistently-failing source is visible in
+`/admin/monitoring` rather than silently going quiet.
+
+**Multilingual readiness**: the content model was already
+language-agnostic before this phase — `NewsSource.language` and
+`NewsArticle.language` are per-row fields (defaulting to `en`), decoupled
+from `portal_topic`/`slug`/`category`, so nothing in the schema assumes
+English. Adding a Russian- or Kazakh-language source is just a matter of
+inserting one with `language="ru"`/`"kk"` (via the admin sources API
+above, or a future "add source" UI) — no article gets duplicated per
+language, no schema change needed. Full translation of existing English
+content, or a language switcher on the portal, is intentionally not built
+here — that's a real product decision (machine-translate vs. only show
+native-language sources vs. something else) the spec explicitly leaves
+for later, not something to guess at now.
+
+## News Platform: trending + full-text search
+
+`GET /api/news/trending` ranks articles by the same `importance_score`
+the dedup engine and admin panel already compute
+(`app/intelligence/news/dedup.py::compute_importance_score`) over the last
+48 hours — no fabricated view/click counters, just how significant the
+classifier scored a story and how many independent sources corroborated
+it. A story grouped into a `NewsEvent` (multiple sources covering one
+event, see "News Platform: deduplication" above) appears once, via its
+primary article, so a 5-source story doesn't take 5 trending slots. A
+solo article (no event — nothing else matched it) is scored the same way:
+`compute_importance_score` on just its own `impact_score`.
+
+`GET /api/news/search` uses real Postgres full-text search
+(`websearch_to_tsquery` + `ts_rank`, `app/services/news_repository.py::
+search_news`) instead of the old `ILIKE '%query%'` substring scan —
+`websearch_to_tsquery` understands quoted phrases and `-exclusion` the way
+a search box normally does. Title matches are weighted above summary-only
+matches via `setweight`. The backing GIN expression index (not a stored
+column, so no backfill needed) is created in `database/session.py`'s
+`_apply_lightweight_migrations` — its expression must stay identical to
+the one in `search_news` or Postgres won't use it (still correct, just
+slower).
+
+Both endpoints, plus `/portal`, are PUBLISHED-only —
+`editorial_status="PUBLISHED"` (Q5's editorial workflow) — so an article
+sitting in `PENDING_REVIEW`/`REJECTED` in the admin queue is never visible
+on the public portal before an editor acts on it.
+
+## News Platform: real user accounts
+
+Real accounts (`app/services/auth_service.py`, `app/api/auth.py`,
+`app/api/user.py`) back the private dashboard — saved articles and a
+watchlist placeholder — and the future admin panel. The public News
+Portal never requires one.
+
+- **Password hashing**: bcrypt (`bcrypt` package directly, not
+  passlib — avoids a known passlib/modern-bcrypt version-detection
+  incompatibility).
+- **Sessions**: JWT (HS256, PyJWT), 7 days by default
+  (`JWT_EXPIRE_MINUTES`). `POST /api/auth/register`/`login` return the
+  token in the JSON body rather than a cookie, since the frontend is on a
+  different domain (Vercel) than this backend (Railway) and couldn't
+  read a cross-origin cookie; the frontend's own `/api/auth/*` Route
+  Handlers proxy through here and set a first-party httpOnly cookie —
+  see the frontend README.
+- **Fails closed**: `JWT_SECRET_KEY` unset means register/login return
+  503 rather than issuing a token no one can safely verify — opposite of
+  this codebase's usual fail-open data-enrichment default, since this is
+  access control. Generate one with `openssl rand -hex 32` and use the
+  **exact same value** on the frontend (`JWT_SECRET_KEY` there too, no
+  `NEXT_PUBLIC_` prefix) — both sides verify the same token.
+- **Authorization**: `get_current_user` (`app/api/deps.py`) re-fetches
+  the user from the DB on every request rather than trusting the JWT's
+  embedded role — a role change or deactivation takes effect immediately
+  without needing token revocation. `get_current_admin_user` builds on
+  it for the future admin panel (Q5); new accounts always register as
+  `role="user"`, never client-settable.
+- **Endpoints**: `POST /api/auth/register` (409 on duplicate email),
+  `POST /api/auth/login` (generic 401 for both unknown-email and
+  wrong-password — no account enumeration), `GET /api/auth/me`,
+  `GET/POST/DELETE /api/user/bookmarks[/{id}]`,
+  `GET/POST/DELETE /api/user/watchlist[/{symbol}]` (capped at 50
+  symbols; architecture only — no live prices wired in yet).
 
 ## Backtesting Engine (Sprint 5)
 

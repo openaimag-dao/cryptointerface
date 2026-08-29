@@ -12,7 +12,7 @@ service layer.
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.news import _to_news_item
+from app.api.news import to_news_item
 from app.api.whales import _to_whale_transaction
 from app.database.session import get_db
 from app.schemas.asset import (
@@ -197,7 +197,7 @@ async def get_asset_news(
 ) -> list[NewsItem]:
     base_asset = _base_asset(symbol)
     articles = await asset_service.get_news_snapshot(db, base_asset, limit=limit)
-    return [_to_news_item(a) for a in articles]
+    return [to_news_item(a) for a in articles]
 
 
 @router.get("/{symbol}/macro", response_model=list[MacroInfluenceReadingOut])

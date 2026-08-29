@@ -54,6 +54,15 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_chat_model: str = "claude-sonnet-5"
 
+    # Real user accounts (app/services/auth_service.py) — register/login for
+    # the private dashboard, separate from the public News Portal. Blank
+    # means auth is unconfigured; register/login fail closed (503) rather
+    # than issuing tokens no one can safely verify. Generate one with
+    # `openssl rand -hex 32` — never commit a real value.
+    jwt_secret_key: str = ""
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
+
     # Sprint 4: Intelligence Layer (app/intelligence/).
     # Alpha Vantage free tier is tiny (25 requests/day) — see
     # app/intelligence/macro/providers.py — so the default poll interval
@@ -72,6 +81,11 @@ class Settings(BaseSettings):
     # Claude call per portal topic per cycle, so this stays hourly rather
     # than matching news_poll_interval_seconds.
     news_digest_interval_seconds: float = 3_600.0  # 1h
+    # AI News Processing (app/intelligence/llm/news_processing.py) — one
+    # Claude call per unprocessed article per batch, so this runs often
+    # enough to keep the backlog small without hammering the API.
+    ai_processing_interval_seconds: float = 900.0  # 15min
+    ai_processing_batch_size: int = 20
 
     # Whale Engine (app/intelligence/whales/) — Etherscan free tier (5
     # req/sec, 100k/day, get a key at https://etherscan.io/apis). Leave

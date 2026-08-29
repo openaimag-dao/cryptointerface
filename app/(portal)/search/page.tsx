@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
 
+import { parsePageParam } from "@/lib/pagination";
 import { PageHeader } from "@/components/common/page-header";
 import { PortalNewsCard } from "@/components/portal/news-card";
+import { PortalPagination } from "@/components/portal/pagination";
 import { Button } from "@/components/ui/button";
 import { searchNews } from "@/services/news-service";
 
+const PAGE_SIZE = 24;
+
 interface SearchPageProps {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; page?: string }>;
 }
 
 // Query-driven results have no stable canonical content, so keep it out of
@@ -17,13 +21,24 @@ export const metadata: Metadata = {
 };
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
-  const { q } = await searchParams;
+  const { q, page: pageParam } = await searchParams;
   const query = q?.trim() ?? "";
-  const results = query ? await searchNews(query) : [];
+  const page = parsePageParam(pageParam);
+  const result = query ? await searchNews(query, undefined, PAGE_SIZE, (page - 1) * PAGE_SIZE) : null;
+  const items = result?.items ?? [];
+  const totalPages = result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1;
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Search" description="Search across all AIMAG News articles" />
+      <PageHeader
+        title="Search"
+        description={
+          result
+            ? `${result.total} article${result.total === 1 ? "" : "s"} matched`
+            : "Search across all AIMAG News articles"
+        }
+        serif
+      />
 
       <form action="/search" method="get" className="flex gap-2">
         <input
@@ -36,16 +51,20 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         <Button type="submit">Search</Button>
       </form>
 
-      {query && results.length === 0 ? (
+      {query && items.length === 0 ? (
         <p className="text-sm text-muted-foreground">No articles matched &ldquo;{query}&rdquo;.</p>
       ) : null}
 
-      {results.length > 0 ? (
+      {items.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {results.map((item) => (
+          {items.map((item) => (
             <PortalNewsCard key={item.id} news={item} />
           ))}
         </div>
+      ) : null}
+
+      {query ? (
+        <PortalPagination basePath="/search" page={page} totalPages={totalPages} extraParams={{ q: query }} />
       ) : null}
     </div>
   );

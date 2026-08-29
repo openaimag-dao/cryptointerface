@@ -1,57 +1,27 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i++) {
-    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return mismatch === 0;
-}
+import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 
-function unauthorized(): NextResponse {
-  return new NextResponse("Authentication required", {
-    status: 401,
-    headers: {
-      "WWW-Authenticate": 'Basic realm="AIMAG Terminal", charset="UTF-8"',
-    },
-  });
-}
+export async function middleware(request: NextRequest): Promise<NextResponse> {
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  // Fail closed: no cookie, an invalid one, or JWT_SECRET_KEY unset all
+  // resolve to "not authenticated" — never fall through to the terminal.
+  const session = token ? await verifySessionToken(token) : null;
 
-export function middleware(request: NextRequest): NextResponse {
-  const expectedUser = process.env.TERMINAL_BASIC_AUTH_USER;
-  const expectedPassword = process.env.TERMINAL_BASIC_AUTH_PASSWORD;
-
-  // Fail closed: the terminal has no other access control, so if credentials
-  // aren't configured there is no safe way to grant access — block instead
-  // of leaving it open.
-  if (!expectedUser || !expectedPassword) {
-    return unauthorized();
+  if (!session) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("next", request.nextUrl.pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Basic ")) {
-    return unauthorized();
-  }
-
-  let decoded: string;
-  try {
-    decoded = atob(authHeader.slice("Basic ".length));
-  } catch {
-    return unauthorized();
-  }
-
-  const separatorIndex = decoded.indexOf(":");
-  if (separatorIndex === -1) {
-    return unauthorized();
-  }
-
-  const user = decoded.slice(0, separatorIndex);
-  const password = decoded.slice(separatorIndex + 1);
-
-  if (!timingSafeEqual(user, expectedUser) || !timingSafeEqual(password, expectedPassword)) {
-    return unauthorized();
+  // Editorial workflow admin pages need role="admin" on top of a valid
+  // session. This is a UX-layer gate only — every /api/admin/* call is
+  // independently re-checked against the DB-persisted role by the backend
+  // (app/api/deps.py::get_current_admin_user), so a stale JWT can never
+  // grant real admin access even if it slips past this check.
+  if (request.nextUrl.pathname.startsWith("/admin") && session.role !== "admin") {
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return NextResponse.next();
@@ -61,7 +31,8 @@ export function middleware(request: NextRequest): NextResponse {
 // portal. Route groups like (terminal) don't appear in the URL, so the
 // protected paths are listed explicitly here — this must stay in sync with
 // app/(terminal)'s subdirectories. Next.js statically analyzes this config
-// at build time, so the matcher has to be a literal array (no .map()).
+// at build time, so the matcher has to be a literal array (no .map(), no
+// separate identifier reference).
 export const config = {
   matcher: [
     "/dashboard/:path*",
@@ -77,5 +48,9 @@ export const config = {
     "/settings/:path*",
     "/signals/:path*",
     "/whales/:path*",
+    "/saved/:path*",
+    "/watchlist/:path*",
+    "/account/:path*",
+    "/admin/:path*",
   ],
 };

@@ -26,6 +26,7 @@ async function fetchRecentArticles(maxItems: number): Promise<NewsItem[]> {
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticEntries: MetadataRoute.Sitemap = [
     { url: SITE_URL, changeFrequency: "hourly", priority: 1 },
+    { url: `${SITE_URL}/trending`, changeFrequency: "hourly", priority: 0.9 },
     { url: `${SITE_URL}/search`, changeFrequency: "monthly", priority: 0.3 },
     ...PORTAL_TOPICS.map((topic) => ({
       url: `${SITE_URL}/category/${topic.slug}`,

@@ -1,7 +1,14 @@
-"""Registry of RSS sources the News Engine aggregates.
+"""Seed registry of RSS sources the News Engine aggregates.
 
-To add a new source: add one `NewsSourceDef` here. Nothing else needs to
-change — `service.py` iterates this registry on every poll cycle.
+This list only ever runs once per source, at app startup
+(`app.services.news_source_repository.seed_default_sources`, called from
+`main.py`'s lifespan) — it idempotently inserts each entry as a row in
+the `news_sources` table if one with that `id` doesn't already exist.
+After that, the DB table is the source of truth: `service.py` iterates
+enabled `NewsSource` rows, not this list, so an admin's edits (disable,
+retrust, toggle auto-publish) survive restarts and take effect on the
+next poll cycle with no deploy. To add a brand-new source: add one
+`NewsSourceDef` here — it'll be seeded on the next app start.
 
 `default_topic` is the portal-taxonomy fallback (`app/intelligence/news/
 classifier.py`'s `classify_portal_topic()`) used when an article's own text
@@ -41,7 +48,9 @@ NEWS_SOURCES: list[NewsSourceDef] = [
         default_topic="AI",
     ),
     # Blockchain (infra/institutional angle, distinct from CRYPTO's market-news sources)
-    NewsSourceDef(id="theblock", name="The Block", rss_url="https://www.theblock.co/rss.xml", default_topic="BLOCKCHAIN"),
+    NewsSourceDef(
+        id="theblock", name="The Block", rss_url="https://www.theblock.co/rss.xml", default_topic="BLOCKCHAIN"
+    ),
     NewsSourceDef(
         id="cryptoslate", name="CryptoSlate", rss_url="https://cryptoslate.com/feed/", default_topic="BLOCKCHAIN"
     ),

@@ -74,16 +74,71 @@ Blockchain, and Innovation headlines aggregated from 9 real RSS sources
 and classified automatically, with an AI-narrated digest per topic (real
 articles only, no fabrication — see backend/README.md's "News Portal
 (Public)" section). The trading terminal itself (Dashboard, Markets,
-Assets, etc.) moved to `/dashboard` and friends, gated by HTTP Basic
-Auth (`middleware.ts`) so it stays private while living in the same app:
+Assets, etc.) moved to `/dashboard` and friends, gated by a real login
+(`/login`, `/register`) rather than a shared secret, so it stays private
+while living in the same app:
 
 | Route | Access |
 |---|---|
-| `/`, `/category/{crypto,ai,blockchain,innovation}`, `/article/{id}`, `/search` | Public |
-| `/dashboard`, `/markets`, `/assets/{symbol}`, `/ai-chat`, `/portfolio`, `/signals`, `/backtesting`, `/liquidations`, `/macro`, `/news`, `/sentiment`, `/settings`, `/whales` | Requires `TERMINAL_BASIC_AUTH_USER`/`TERMINAL_BASIC_AUTH_PASSWORD` |
+| `/`, `/category/{crypto,ai,blockchain,innovation}`, `/article/{id}`, `/search`, `/trending` | Public |
+| `/login`, `/register` | Public |
+| `/dashboard`, `/markets`, `/assets/{symbol}`, `/ai-chat`, `/portfolio`, `/signals`, `/backtesting`, `/liquidations`, `/macro`, `/news`, `/sentiment`, `/settings`, `/whales`, `/saved`, `/watchlist`, `/account` | Requires a logged-in session |
+| `/admin/news`, `/admin/sources`, `/admin/monitoring` | Requires a logged-in session with `role="admin"` |
 
-Set both env vars (frontend, not `NEXT_PUBLIC_*` — they're server-only) to
-enable the terminal; **unset, it fails closed** (401 on every terminal
-route) rather than being left open. `NEXT_PUBLIC_SITE_URL` (also
-frontend) is the canonical URL used by `app/sitemap.ts`/`app/robots.ts`
-for absolute URLs and OpenGraph tags.
+`middleware.ts` verifies the same JWT the backend issues on
+register/login (`lib/session.ts`, via the `jose` library so it works in
+the Edge runtime) — set `JWT_SECRET_KEY` (frontend, server-only) to the
+**exact same value** as the backend's `JWT_SECRET_KEY`
+(backend/.env.example), or every terminal route redirects to `/login`
+(fails closed by design, same reasoning the old Basic Auth gate used).
+The backend and frontend are on separate domains (Railway/Vercel), so
+register/login proxy through this frontend's own `/api/auth/*` Route
+Handlers, which set a first-party httpOnly cookie — the raw token never
+reaches client-side JS. `NEXT_PUBLIC_SITE_URL` (also frontend) is the
+canonical URL used by `app/sitemap.ts`/`app/robots.ts` for absolute URLs
+and OpenGraph tags.
+
+### Portal visual identity
+
+The public portal (`app/(portal)/`) deliberately looks nothing like the
+trading terminal: a warm paper background, ink text, a serif headline
+typeface (Source Serif 4, `--font-serif`), and a muted editorial
+green/brick-red palette instead of the terminal's dark background and
+neon-green accent. This is scoped by a `.portal-theme` class wrapping
+`app/(portal)/layout.tsx`'s root element (`app/globals.css`) that
+redefines the same CSS custom properties (`--background`, `--accent`,
+etc.) the terminal uses — so every existing UI primitive (`Card`,
+`Badge`, `Button`...) re-themes automatically with zero component
+changes, and the terminal's own dark theme is completely unaffected
+outside that scope. `PageHeader` takes an optional `serif` prop for
+portal section headings; the terminal's dashboard-style pages leave it
+off.
+
+Article images (`NewsItem.imageUrl`) are real image URLs pulled from
+each source's own RSS feed (Media RSS `<media:content>`/
+`<media:thumbnail>` or a plain `<enclosure>` — see backend/README.md's
+"real article images" section) — never a placeholder graphic, so a
+card or the article-page hero simply omits the image entirely when the
+source's feed doesn't include one. `components/portal/article-image.tsx`
+handles a URL that later goes stale (the publisher deletes/moves it) by
+hiding itself on load failure rather than showing a broken-image icon.
+
+`/admin/news` is the editorial moderation queue (backend/README.md's
+"News Platform: editorial workflow + admin panel" section) — `middleware.ts`
+additionally checks the JWT's `role` claim is `"admin"` before allowing
+`/admin/*` through, redirecting anyone else to `/`. That check is UX-layer
+only: every `/api/admin/*` Route Handler forwards the session cookie as a
+Bearer token to the backend, which independently re-checks the
+DB-persisted role on every request, so a stale JWT (e.g. after a demotion)
+can never grant real admin access even if it slipped past the frontend
+gate. The Sidebar only renders the "Admin" nav link for `role="admin"`
+users (`lib/constants.ts::ADMIN_NAV_ITEM`); there's no in-app way to
+become an admin — see `backend/scripts/promote_to_admin.py`.
+
+`app/(terminal)/admin/layout.tsx` adds a News / Sources / Monitoring tab
+strip shared by all `/admin/*` pages. `/admin/sources` lists the
+DB-backed RSS source registry with live `enabled`/`auto-publish` toggles
+(backend/README.md's "source management" section) — a change here
+affects the very next poll cycle, no deploy. `/admin/monitoring` is a
+read-only table of recent RSS poll attempts (`NewsFetchLog`), so a
+persistently-failing source is visible rather than silently going quiet.

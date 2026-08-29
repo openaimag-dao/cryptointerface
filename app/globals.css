@@ -52,6 +52,42 @@
   --info: #2563eb;
 }
 
+/* Public News Portal ((portal) route group only) — a deliberately
+ * distinct identity from the trading terminal's dark/neon-green look
+ * (see repo spec: the portal must read as premium editorial media, not
+ * a trading dashboard). Warm paper background, ink text, a muted
+ * editorial green (still "up/bullish" semantically, just not neon) and
+ * a deep brick red instead of crypto-app red. Scoped to a wrapper class
+ * in app/(portal)/layout.tsx rather than the global `.light` toggle, so
+ * it's independent of the terminal's own theme setting.
+ */
+.portal-theme {
+  color-scheme: light;
+
+  --background: #faf8f3;
+  --foreground: #1c1a17;
+
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --border-subtle: rgba(28, 26, 23, 0.09);
+  --border-strong: rgba(28, 26, 23, 0.18);
+
+  --muted: #7a7268;
+  --muted-foreground: #57524a;
+
+  --accent: #2f6b4f;
+  --accent-foreground: #ffffff;
+  --accent-dim: rgba(47, 107, 79, 0.1);
+
+  --danger: #a8332a;
+  --danger-dim: rgba(168, 51, 42, 0.08);
+
+  --warning: #92660a;
+  --warning-dim: rgba(146, 102, 10, 0.08);
+
+  --info: #1d4ed8;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -78,6 +114,7 @@
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-source-serif);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -144,6 +181,23 @@ body {
   background: color-mix(in srgb, var(--surface-elevated) 78%, transparent);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+}
+
+/* The glass/blur treatment exists for the terminal's busy dark
+ * backgrounds (charts, gradients) where translucency reads as "glass
+ * over data." On the portal's flat paper background there's nothing
+ * behind a card worth blurring, so this reduces to overhead — and to a
+ * genuine rendering hazard: `backdrop-filter: blur()` is known to
+ * misrender as an oversized blank/white region in headless Chromium and
+ * some GPU-constrained environments. Opaque cards are also just the more
+ * correct look for a publication: flat and print-like, not "app chrome."
+ */
+.portal-theme .glass-panel,
+.portal-theme .glass-panel-elevated {
+  background: var(--surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border: 1px solid var(--border-subtle);
 }
 

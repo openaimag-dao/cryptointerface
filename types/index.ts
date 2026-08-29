@@ -13,3 +13,5 @@ export * from "./llm";
 export * from "./dashboard-intelligence";
 export * from "./backtest";
 export * from "./asset";
+export * from "./auth";
+export * from "./admin";

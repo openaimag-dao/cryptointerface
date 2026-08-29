@@ -19,6 +19,12 @@ asyncpg==0.29.0
 redis==5.0.8
 numpy==1.26.4
 
+# Auth (app/services/auth_service.py) — real accounts for the private
+# dashboard/admin panel, not the News Portal (which stays public).
+bcrypt==4.2.0
+pyjwt==2.9.0
+email-validator==2.2.0
+
 # Dev / test
 pytest==8.3.3
 pytest-asyncio==0.24.0

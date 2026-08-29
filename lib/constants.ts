@@ -1,5 +1,6 @@
 import {
   Activity,
+  Bookmark,
   Bot,
   Flame,
   Gauge,
@@ -9,6 +10,9 @@ import {
   MessageSquareText,
   Newspaper,
   Settings,
+  ShieldCheck,
+  Star,
+  User,
   Wallet,
   Waves,
 } from "lucide-react";
@@ -31,8 +35,16 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Portfolio", href: "/portfolio", icon: Wallet },
   { label: "Backtesting", href: "/backtesting", icon: Activity },
   { label: "AI Chat", href: "/ai-chat", icon: MessageSquareText },
+  { label: "Saved News", href: "/saved", icon: Bookmark },
+  { label: "Watchlist", href: "/watchlist", icon: Star },
   { label: "Settings", href: "/settings", icon: Settings },
+  { label: "Account", href: "/account", icon: User },
 ];
+
+// Rendered by Sidebar only when the current user's role is "admin" — kept
+// out of NAV_ITEMS so it never shows for regular users. middleware.ts
+// enforces the actual access control; this is just visibility.
+export const ADMIN_NAV_ITEM: NavItem = { label: "Admin", href: "/admin/news", icon: ShieldCheck };
 
 // Primary Dashboard watchlist + chart symbol tabs. Must be a subset of the
 // backend's SYMBOLS env var (see backend/.env.example) or these cards will

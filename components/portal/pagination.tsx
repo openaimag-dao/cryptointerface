@@ -4,13 +4,22 @@ interface PortalPaginationProps {
   basePath: string;
   page: number;
   totalPages: number;
+  // Extra query params to carry across page links (e.g. a search page's
+  // ?q=...) — merged in alongside `page`.
+  extraParams?: Record<string, string>;
 }
 
-export function PortalPagination({ basePath, page, totalPages }: PortalPaginationProps) {
+export function PortalPagination({ basePath, page, totalPages, extraParams }: PortalPaginationProps) {
   if (totalPages <= 1) return null;
 
-  const prevHref = page > 1 ? `${basePath}?page=${page - 1}` : null;
-  const nextHref = page < totalPages ? `${basePath}?page=${page + 1}` : null;
+  function hrefForPage(targetPage: number): string {
+    const params = new URLSearchParams(extraParams);
+    params.set("page", String(targetPage));
+    return `${basePath}?${params.toString()}`;
+  }
+
+  const prevHref = page > 1 ? hrefForPage(page - 1) : null;
+  const nextHref = page < totalPages ? hrefForPage(page + 1) : null;
 
   return (
     <nav className="mt-8 flex items-center justify-between text-sm" aria-label="Pagination">

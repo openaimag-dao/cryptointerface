@@ -5,8 +5,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
+    admin,
     ai,
     assets,
+    auth,
     backtesting,
     candles,
     chat,
@@ -23,6 +25,7 @@ from app.api import (
     sentiment,
     signals,
     status,
+    user,
     websocket,
     whales,
 )
@@ -32,6 +35,7 @@ from app.core.logging import configure_logging, get_logger
 from app.core.redis import close_redis
 from app.database.session import AsyncSessionLocal, dispose_engine, init_models
 from app.intelligence.scheduler.tasks import (
+    run_ai_news_processing,
     run_llm_explanation_refresh,
     run_macro_poller,
     run_news_digest_refresh,
@@ -40,6 +44,7 @@ from app.intelligence.scheduler.tasks import (
     run_whale_poller,
 )
 from app.services.binance.ws_client import ConnectionState
+from app.services.news_source_repository import seed_default_sources
 from app.services.websocket.manager import connection_manager
 from app.tasks.coingecko_fallback import run_coingecko_fallback_poller
 from app.tasks.historical_loader import run_historical_backfill
@@ -62,6 +67,8 @@ async def _on_ws_state_change(connection_index: int, state: ConnectionState) -> 
 async def lifespan(app: FastAPI):
     logger.info("app_starting", extra={"environment": settings.environment, "symbols": settings.symbol_list})
     await init_models()
+    async with AsyncSessionLocal() as db:
+        await seed_default_sources(db)
 
     live_feed = LiveFeedService(broadcast=connection_manager.broadcast, on_state_change=_on_ws_state_change)
 
@@ -85,6 +92,7 @@ async def lifespan(app: FastAPI):
     _background_tasks.append(asyncio.create_task(run_sentiment_recompute(stop_event=_stop_event)))
     _background_tasks.append(asyncio.create_task(run_llm_explanation_refresh(stop_event=_stop_event)))
     _background_tasks.append(asyncio.create_task(run_news_digest_refresh(stop_event=_stop_event)))
+    _background_tasks.append(asyncio.create_task(run_ai_news_processing(stop_event=_stop_event)))
 
     yield
 
@@ -108,8 +116,9 @@ app = FastAPI(
     "unmodified Decision Engine bar by bar with no look-ahead (see app/backtesting/). "
     "Portfolio reads a single service Binance Futures account's real balance/positions/trade "
     "history when BINANCE_API_KEY/SECRET are configured, falling back to mock data otherwise "
-    "(see app/services/portfolio_service.py) — this app has no user/auth system, so there is "
-    "exactly one portfolio.",
+    "(see app/services/portfolio_service.py) — that account is shared across all users, not "
+    "per-account. Real per-user accounts (register/login/JWT, see app/services/auth_service.py) "
+    "back the private dashboard's saved articles and watchlist, not Portfolio.",
     version="0.2.0",
     lifespan=lifespan,
 )
@@ -169,6 +178,15 @@ app.include_router(assets.router)
 # Real when BINANCE_API_KEY/SECRET are configured (falls back to mock
 # otherwise) — see app/services/portfolio_service.py.
 app.include_router(portfolio.router)
+
+# News Platform: real user accounts (app/services/auth_service.py) for the
+# private dashboard — the public News Portal never requires one.
+app.include_router(auth.router)
+app.include_router(user.router)
+
+# News Platform: editorial workflow admin API — every route requires
+# role="admin" (app/api/deps.py::get_current_admin_user).
+app.include_router(admin.router)
 
 
 @app.get("/api/health", tags=["health"])
