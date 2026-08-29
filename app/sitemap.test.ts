@@ -46,6 +46,7 @@ describe("sitemap", () => {
     expect(staticUrls.some((url) => url.endsWith("/category/blockchain"))).toBe(true);
     expect(staticUrls.some((url) => url.endsWith("/category/innovation"))).toBe(true);
     expect(staticUrls.some((url) => url.endsWith("/search"))).toBe(true);
+    expect(staticUrls.some((url) => url.endsWith("/trending"))).toBe(true);
 
     const articleEntries = entries.filter((entry) => entry.url.includes("/article/"));
     expect(articleEntries).toHaveLength(150);

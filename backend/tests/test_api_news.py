@@ -90,6 +90,61 @@ async def test_portal_endpoint_without_topic_returns_everything(db_session):
 
 
 @pytest.mark.asyncio
+async def test_search_endpoint_returns_a_paginated_page(db_session):
+    await _insert(db_session, url="https://example.com/bitcoin-a", title="Bitcoin breaks records")
+    await _insert(db_session, url="https://example.com/unrelated", title="Something else entirely")
+
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/search", params={"q": "bitcoin"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["url"] == "https://example.com/bitcoin-a"
+
+
+@pytest.mark.asyncio
+async def test_search_endpoint_rejects_unknown_topic(db_session):
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/search", params={"q": "bitcoin", "topic": "SPORTS"})
+
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_trending_endpoint_ranks_by_importance(db_session):
+    await _insert(db_session, url="https://example.com/low-impact", title="Minor update")
+    await insert_article(
+        db_session,
+        source="Test Source",
+        title="Major breaking news",
+        summary="Summary text",
+        url="https://example.com/high-impact",
+        published_at=int(datetime.now(UTC).timestamp()),
+        language="en",
+        symbols=[],
+        impact_score=90.0,
+        sentiment="NEUTRAL",
+        category="Market",
+    )
+
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/trending")
+
+    assert response.status_code == 200
+    urls = [item["url"] for item in response.json()]
+    assert urls[0] == "https://example.com/high-impact"
+
+
+@pytest.mark.asyncio
+async def test_trending_endpoint_rejects_unknown_topic(db_session):
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/trending", params={"topic": "SPORTS"})
+
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_get_article_by_id_200(db_session):
     await _insert(db_session, url="https://example.com/findme", title="Find Me")
 
@@ -112,17 +167,20 @@ async def test_get_article_by_id_404_for_missing_article(db_session):
 
 @pytest.mark.asyncio
 async def test_literal_routes_are_not_shadowed_by_the_id_catch_all(db_session):
-    """/latest, /search, /portal, and /digest must resolve to their own
-    handlers, not fall into get_article(article_id: int) and 422 on type
-    coercion — this only holds if the dynamic route is registered last."""
+    """/latest, /search, /trending, /portal, and /digest must resolve to
+    their own handlers, not fall into get_article(article_id: int) and 422
+    on type coercion — this only holds if the dynamic route is registered
+    last."""
     async with await _client(db_session) as client:
         latest = await client.get("/api/news/latest")
         search = await client.get("/api/news/search", params={"q": "bitcoin"})
+        trending = await client.get("/api/news/trending")
         portal = await client.get("/api/news/portal")
         digest = await client.get("/api/news/digest", params={"topic": "AI"})
 
     assert latest.status_code == 200
     assert search.status_code == 200
+    assert trending.status_code == 200
     assert portal.status_code == 200
     assert digest.status_code == 404  # no digest generated yet — still a real 404, not a 422
 

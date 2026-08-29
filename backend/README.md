@@ -624,6 +624,35 @@ cd backend && .venv/bin/python -m scripts.promote_to_admin someone@example.com
 The user must already be registered; the script exits 1 with a message if
 the email isn't found.
 
+## News Platform: trending + full-text search
+
+`GET /api/news/trending` ranks articles by the same `importance_score`
+the dedup engine and admin panel already compute
+(`app/intelligence/news/dedup.py::compute_importance_score`) over the last
+48 hours — no fabricated view/click counters, just how significant the
+classifier scored a story and how many independent sources corroborated
+it. A story grouped into a `NewsEvent` (multiple sources covering one
+event, see "News Platform: deduplication" above) appears once, via its
+primary article, so a 5-source story doesn't take 5 trending slots. A
+solo article (no event — nothing else matched it) is scored the same way:
+`compute_importance_score` on just its own `impact_score`.
+
+`GET /api/news/search` uses real Postgres full-text search
+(`websearch_to_tsquery` + `ts_rank`, `app/services/news_repository.py::
+search_news`) instead of the old `ILIKE '%query%'` substring scan —
+`websearch_to_tsquery` understands quoted phrases and `-exclusion` the way
+a search box normally does. Title matches are weighted above summary-only
+matches via `setweight`. The backing GIN expression index (not a stored
+column, so no backfill needed) is created in `database/session.py`'s
+`_apply_lightweight_migrations` — its expression must stay identical to
+the one in `search_news` or Postgres won't use it (still correct, just
+slower).
+
+Both endpoints, plus `/portal`, are PUBLISHED-only —
+`editorial_status="PUBLISHED"` (Q5's editorial workflow) — so an article
+sitting in `PENDING_REVIEW`/`REJECTED` in the admin queue is never visible
+on the public portal before an editor acts on it.
+
 ## News Platform: real user accounts
 
 Real accounts (`app/services/auth_service.py`, `app/api/auth.py`,

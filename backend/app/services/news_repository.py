@@ -7,13 +7,21 @@ to call every cycle without accumulating duplicate rows.
 
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, literal_column, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_engine.types import NewsSnapshot
+from app.intelligence.news.dedup import compute_importance_score
 from app.models.news import NewsArticle
+from app.models.news_event import NewsEvent
 from app.utils.slug import slugify
+
+# Trending window: how far back "trending" looks, matching dedup's own
+# TIME_WINDOW_HOURS (app/intelligence/news/dedup.py) — the same "current
+# news cycle" boundary the dedup engine already uses to decide whether two
+# articles are about the same event.
+TRENDING_WINDOW_HOURS = 48
 
 # How far back a symbol/market-wide news snapshot looks for score_news()
 # and the Sentiment Engine — recent enough that stale news doesn't keep
@@ -121,9 +129,12 @@ async def get_portal_news_page(
     """Paginated portal listing (real DB-level LIMIT/OFFSET, unlike the
     Python-side filtering `get_latest_news` does for the symbol filter —
     a public portal listing page needs real pagination, not a 500-row
-    fetch-then-slice). Returns (articles, total_count) for the topic."""
-    base_stmt = select(NewsArticle)
-    count_stmt = select(func.count()).select_from(NewsArticle)
+    fetch-then-slice). Returns (articles, total_count) for the topic.
+    PUBLISHED-only — this is the public portal's main listing, and an
+    article sitting in PENDING_REVIEW or REJECTED (app/api/admin.py) must
+    never be visible here before an editor acts on it."""
+    base_stmt = select(NewsArticle).where(NewsArticle.editorial_status == "PUBLISHED")
+    count_stmt = select(func.count()).select_from(NewsArticle).where(NewsArticle.editorial_status == "PUBLISHED")
     if topic is not None:
         base_stmt = base_stmt.where(NewsArticle.portal_topic == topic)
         count_stmt = count_stmt.where(NewsArticle.portal_topic == topic)
@@ -156,16 +167,89 @@ async def get_editorial_status_counts(db: AsyncSession) -> dict[str, int]:
     return dict(result.all())
 
 
-async def search_news(db: AsyncSession, query: str, limit: int = 30) -> list[NewsArticle]:
-    pattern = f"%{query}%"
+async def search_news(
+    db: AsyncSession, query: str, topic: str | None = None, limit: int = 30, offset: int = 0
+) -> tuple[list[NewsArticle], int]:
+    """Real Postgres full-text search over title + summary —
+    `websearch_to_tsquery` (handles quoted phrases, `-exclusion`, implicit
+    AND the way a search engine's query box does) ranked by `ts_rank`,
+    not a naive ILIKE substring scan. Title matches are weighted ('A')
+    above summary-only matches ('B') via `setweight`, so a headline hit
+    outranks an incidental mention in the body. The matching GIN
+    expression index is created in database/session.py's
+    `_apply_lightweight_migrations` — keep the two expressions identical
+    or Postgres just won't use the index (still correct, only slower).
+    PUBLISHED-only: this is the public portal's search, same reasoning as
+    `get_portal_news_page`. Returns (articles, total_count)."""
+    # setweight's second argument is Postgres's single-byte "char" type, not
+    # varchar — literal_column renders 'A'/'B' as untyped SQL literals
+    # (rather than a bound ::VARCHAR param) so Postgres's usual implicit
+    # coercion for unknown-type literals applies, same as writing this by
+    # hand in psql.
+    document = func.setweight(func.to_tsvector("english", NewsArticle.title), literal_column("'A'")).op("||")(
+        func.setweight(func.to_tsvector("english", NewsArticle.summary), literal_column("'B'"))
+    )
+    ts_query = func.websearch_to_tsquery("english", query)
+    rank = func.ts_rank(document, ts_query)
+
+    filters = [document.op("@@")(ts_query), NewsArticle.editorial_status == "PUBLISHED"]
+    if topic is not None:
+        filters.append(NewsArticle.portal_topic == topic)
+
+    count_stmt = select(func.count()).select_from(NewsArticle).where(*filters)
+    total = (await db.execute(count_stmt)).scalar_one()
+
     stmt = (
         select(NewsArticle)
-        .where(or_(NewsArticle.title.ilike(pattern), NewsArticle.summary.ilike(pattern)))
-        .order_by(NewsArticle.published_at.desc())
+        .where(*filters)
+        .order_by(rank.desc(), NewsArticle.published_at.desc())
         .limit(limit)
+        .offset(offset)
     )
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    return list(result.scalars().all()), total
+
+
+async def get_trending_news(db: AsyncSession, topic: str | None = None, limit: int = 20) -> list[NewsArticle]:
+    """Real trending ranking, not a fake counter: reuses the same
+    `importance_score` the dedup engine (app/intelligence/news/dedup.py)
+    and the admin panel already compute — a deterministic blend of the
+    classifier's `impact_score` and independent-source corroboration —
+    over the last TRENDING_WINDOW_HOURS. A story that got grouped into a
+    `NewsEvent` because multiple sources covered it appears once,
+    represented by the event's primary article, so a 5-source story
+    doesn't take 5 trending slots. A "solo" article (no event, i.e. no
+    other source matched it — see news_event_repository.assign_to_event)
+    is scored the same way a lone-source event would be:
+    `compute_importance_score` on just its own impact_score."""
+    cutoff = int(datetime.now(UTC).timestamp()) - TRENDING_WINDOW_HOURS * 3600
+
+    event_stmt = (
+        select(NewsEvent.importance_score, NewsArticle)
+        .join(NewsArticle, NewsArticle.id == NewsEvent.primary_article_id)
+        .where(NewsArticle.published_at >= cutoff, NewsArticle.editorial_status == "PUBLISHED")
+    )
+    solo_stmt = select(NewsArticle).where(
+        NewsArticle.news_event_id.is_(None),
+        NewsArticle.published_at >= cutoff,
+        NewsArticle.editorial_status == "PUBLISHED",
+    )
+    if topic is not None:
+        event_stmt = event_stmt.where(NewsEvent.portal_topic == topic)
+        solo_stmt = solo_stmt.where(NewsArticle.portal_topic == topic)
+
+    event_rows = (await db.execute(event_stmt)).all()
+    solo_articles = (await db.execute(solo_stmt)).scalars().all()
+
+    scored: list[tuple[float, int, NewsArticle]] = [
+        (importance_score, article.published_at, article) for importance_score, article in event_rows
+    ]
+    scored += [
+        (compute_importance_score([article.impact_score]), article.published_at, article)
+        for article in solo_articles
+    ]
+    scored.sort(key=lambda row: (row[0], row[1]), reverse=True)
+    return [article for _, _, article in scored[:limit]]
 
 
 async def get_news_snapshot_for_symbol(db: AsyncSession, symbol: str) -> NewsSnapshot | None:

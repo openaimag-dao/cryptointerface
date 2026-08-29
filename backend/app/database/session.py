@@ -40,6 +40,14 @@ async def _apply_lightweight_migrations(conn: AsyncConnection) -> None:
         "ALTER TABLE news ADD COLUMN IF NOT EXISTS author_id BIGINT REFERENCES authors(id)",
         "ALTER TABLE news ADD COLUMN IF NOT EXISTS ai_summary VARCHAR(1000)",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_news_slug ON news (slug)",
+        # Q6: real Postgres full-text search (news_repository.py::search_news)
+        # over title (weight A) + summary (weight B) — a GIN expression
+        # index, not a stored column, so it needs no backfill for rows that
+        # already exist. Must match search_news's expression exactly or
+        # Postgres won't use it (query stays correct, just unindexed).
+        "CREATE INDEX IF NOT EXISTS ix_news_search_vector ON news "
+        "USING gin ((setweight(to_tsvector('english', title), 'A') || "
+        "setweight(to_tsvector('english', summary), 'B')))",
     ]
     for statement in statements:
         await conn.execute(text(statement))

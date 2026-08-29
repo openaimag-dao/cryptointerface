@@ -27,6 +27,9 @@ export default async function PortalLayout({ children }: { children: ReactNode }
                 {topic.label}
               </Link>
             ))}
+            <Link href="/trending" className="transition-colors hover:text-foreground">
+              Trending
+            </Link>
             <Link href="/search" className="transition-colors hover:text-foreground">
               Search
             </Link>

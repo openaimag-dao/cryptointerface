@@ -31,10 +31,26 @@ export async function fetchArticleById(id: string): Promise<NewsItem | null> {
   }
 }
 
-export async function searchNews(query: string, limit = 30): Promise<NewsItem[]> {
+export async function searchNews(
+  query: string,
+  topic?: PortalTopic,
+  limit = 30,
+  offset = 0,
+): Promise<PortalNewsPage | null> {
   try {
-    const params = new URLSearchParams({ q: query, limit: String(limit) });
-    return await apiFetch<NewsItem[]>(`/api/news/search?${params.toString()}`);
+    const params = new URLSearchParams({ q: query, limit: String(limit), offset: String(offset) });
+    if (topic) params.set("topic", topic);
+    return await apiFetch<PortalNewsPage>(`/api/news/search?${params.toString()}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchTrendingNews(topic?: PortalTopic, limit = 20): Promise<NewsItem[]> {
+  try {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (topic) params.set("topic", topic);
+    return await apiFetch<NewsItem[]>(`/api/news/trending?${params.toString()}`);
   } catch {
     return [];
   }

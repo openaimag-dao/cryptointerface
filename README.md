@@ -80,7 +80,7 @@ while living in the same app:
 
 | Route | Access |
 |---|---|
-| `/`, `/category/{crypto,ai,blockchain,innovation}`, `/article/{id}`, `/search` | Public |
+| `/`, `/category/{crypto,ai,blockchain,innovation}`, `/article/{id}`, `/search`, `/trending` | Public |
 | `/login`, `/register` | Public |
 | `/dashboard`, `/markets`, `/assets/{symbol}`, `/ai-chat`, `/portfolio`, `/signals`, `/backtesting`, `/liquidations`, `/macro`, `/news`, `/sentiment`, `/settings`, `/whales`, `/saved`, `/watchlist`, `/account` | Requires a logged-in session |
 | `/admin/news` | Requires a logged-in session with `role="admin"` |
