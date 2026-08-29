@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import (
     ai,
     assets,
+    auth,
     backtesting,
     candles,
     chat,
@@ -23,6 +24,7 @@ from app.api import (
     sentiment,
     signals,
     status,
+    user,
     websocket,
     whales,
 )
@@ -111,8 +113,9 @@ app = FastAPI(
     "unmodified Decision Engine bar by bar with no look-ahead (see app/backtesting/). "
     "Portfolio reads a single service Binance Futures account's real balance/positions/trade "
     "history when BINANCE_API_KEY/SECRET are configured, falling back to mock data otherwise "
-    "(see app/services/portfolio_service.py) — this app has no user/auth system, so there is "
-    "exactly one portfolio.",
+    "(see app/services/portfolio_service.py) — that account is shared across all users, not "
+    "per-account. Real per-user accounts (register/login/JWT, see app/services/auth_service.py) "
+    "back the private dashboard's saved articles and watchlist, not Portfolio.",
     version="0.2.0",
     lifespan=lifespan,
 )
@@ -172,6 +175,11 @@ app.include_router(assets.router)
 # Real when BINANCE_API_KEY/SECRET are configured (falls back to mock
 # otherwise) — see app/services/portfolio_service.py.
 app.include_router(portfolio.router)
+
+# News Platform: real user accounts (app/services/auth_service.py) for the
+# private dashboard — the public News Portal never requires one.
+app.include_router(auth.router)
+app.include_router(user.router)
 
 
 @app.get("/api/health", tags=["health"])

@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/news", tags=["news"])
 PORTAL_TOPICS = {"CRYPTO", "AI", "BLOCKCHAIN", "INNOVATION"}
 
 
-def _to_news_item(article: NewsArticle) -> NewsItem:
+def to_news_item(article: NewsArticle) -> NewsItem:
     return NewsItem(
         id=str(article.id),
         source=article.source,
@@ -46,13 +46,13 @@ async def list_news(
 ) -> list[NewsItem]:
     symbol = symbol.upper() if symbol else None
     articles = await get_latest_news(db, limit=limit, symbol=symbol, category=category, topic=topic)
-    return [_to_news_item(a) for a in articles]
+    return [to_news_item(a) for a in articles]
 
 
 @router.get("/latest", response_model=list[NewsItem])
 async def latest_news(limit: int = Query(10, ge=1, le=50), db: AsyncSession = Depends(get_db)) -> list[NewsItem]:
     articles = await get_latest_news(db, limit=limit)
-    return [_to_news_item(a) for a in articles]
+    return [to_news_item(a) for a in articles]
 
 
 @router.get("/search", response_model=list[NewsItem])
@@ -60,7 +60,7 @@ async def search(
     q: str = Query(..., min_length=1), limit: int = Query(30, ge=1, le=100), db: AsyncSession = Depends(get_db)
 ) -> list[NewsItem]:
     articles = await search_news(db, q, limit=limit)
-    return [_to_news_item(a) for a in articles]
+    return [to_news_item(a) for a in articles]
 
 
 @router.get("/portal", response_model=PortalNewsPage)
@@ -75,7 +75,7 @@ async def portal_news(
     if topic is not None and topic not in PORTAL_TOPICS:
         raise HTTPException(status_code=400, detail=f"Unknown topic: {topic}. Must be one of {sorted(PORTAL_TOPICS)}")
     articles, total = await get_portal_news_page(db, topic=topic, limit=limit, offset=offset)
-    return PortalNewsPage(items=[_to_news_item(a) for a in articles], total=total, limit=limit, offset=offset)
+    return PortalNewsPage(items=[to_news_item(a) for a in articles], total=total, limit=limit, offset=offset)
 
 
 @router.get("/digest", response_model=NewsDigestOut)
@@ -106,4 +106,4 @@ async def get_article(article_id: int, db: AsyncSession = Depends(get_db)) -> Ne
     article = await get_article_by_id(db, article_id)
     if article is None:
         raise HTTPException(status_code=404, detail=f"No article with id {article_id}")
-    return _to_news_item(article)
+    return to_news_item(article)

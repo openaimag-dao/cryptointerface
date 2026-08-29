@@ -2,6 +2,7 @@ import os
 
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://aimag:aimag@localhost:5432/aimag_test")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/1")
+os.environ.setdefault("JWT_SECRET_KEY", "test-only-jwt-secret-do-not-use-in-production")
 
 import pytest_asyncio  # noqa: E402
 

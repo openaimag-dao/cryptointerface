@@ -54,6 +54,15 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_chat_model: str = "claude-sonnet-5"
 
+    # Real user accounts (app/services/auth_service.py) — register/login for
+    # the private dashboard, separate from the public News Portal. Blank
+    # means auth is unconfigured; register/login fail closed (503) rather
+    # than issuing tokens no one can safely verify. Generate one with
+    # `openssl rand -hex 32` — never commit a real value.
+    jwt_secret_key: str = ""
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
+
     # Sprint 4: Intelligence Layer (app/intelligence/).
     # Alpha Vantage free tier is tiny (25 requests/day) — see
     # app/intelligence/macro/providers.py — so the default poll interval
