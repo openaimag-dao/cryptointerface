@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db
 from app.models.news import NewsArticle
 from app.schemas.news import NewsItem, PortalNewsPage
+from app.schemas.news_digest import NewsDigestOut
+from app.services.news_digest_repository import get_latest_news_digest
 from app.services.news_repository import get_article_by_id, get_latest_news, get_portal_news_page, search_news
 
 router = APIRouter(prefix="/api/news", tags=["news"])
@@ -74,6 +76,29 @@ async def portal_news(
         raise HTTPException(status_code=400, detail=f"Unknown topic: {topic}. Must be one of {sorted(PORTAL_TOPICS)}")
     articles, total = await get_portal_news_page(db, topic=topic, limit=limit, offset=offset)
     return PortalNewsPage(items=[_to_news_item(a) for a in articles], total=total, limit=limit, offset=offset)
+
+
+@router.get("/digest", response_model=NewsDigestOut)
+async def get_news_digest(
+    topic: str = Query(..., description="CRYPTO, AI, BLOCKCHAIN, or INNOVATION"),
+    db: AsyncSession = Depends(get_db),
+) -> NewsDigestOut:
+    """Reads the latest AI-narrated digest generated on a schedule by
+    `run_news_digest_refresh` — never calls Claude inline, so this stays
+    cheap for a public portal page to poll. See
+    app/intelligence/llm/news_digest.py."""
+    if topic not in PORTAL_TOPICS:
+        raise HTTPException(status_code=400, detail=f"Unknown topic: {topic}. Must be one of {sorted(PORTAL_TOPICS)}")
+    digest = await get_latest_news_digest(db, topic)
+    if digest is None:
+        raise HTTPException(status_code=404, detail=f"No digest generated yet for {topic}")
+    return NewsDigestOut(
+        topic=digest.topic,
+        summary=digest.summary,
+        highlights=digest.highlights,
+        article_count=digest.article_count,
+        generated_at=digest.created_at.isoformat(),
+    )
 
 
 @router.get("/{article_id}", response_model=NewsItem)

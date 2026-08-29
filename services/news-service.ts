@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api-client";
-import type { NewsItem, PortalNewsPage, PortalTopic } from "@/types";
+import type { NewsDigest, NewsItem, PortalNewsPage, PortalTopic } from "@/types";
 
 export async function fetchNews(): Promise<NewsItem[]> {
   try {
@@ -37,5 +37,13 @@ export async function searchNews(query: string, limit = 30): Promise<NewsItem[]>
     return await apiFetch<NewsItem[]>(`/api/news/search?${params.toString()}`);
   } catch {
     return [];
+  }
+}
+
+export async function fetchNewsDigest(topic: PortalTopic): Promise<NewsDigest | null> {
+  try {
+    return await apiFetch<NewsDigest>(`/api/news/digest?topic=${topic}`);
+  } catch {
+    return null;
   }
 }

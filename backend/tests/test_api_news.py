@@ -15,6 +15,8 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.news import router as news_router
 from app.database.session import get_db
+from app.intelligence.llm.news_digest import NewsDigestResult
+from app.services.news_digest_repository import insert_news_digest
 from app.services.news_repository import insert_article
 
 
@@ -109,14 +111,51 @@ async def test_get_article_by_id_404_for_missing_article(db_session):
 
 @pytest.mark.asyncio
 async def test_literal_routes_are_not_shadowed_by_the_id_catch_all(db_session):
-    """/latest, /search, and /portal must resolve to their own handlers,
-    not fall into get_article(article_id: int) and 422 on type coercion —
-    this only holds if the dynamic route is registered last."""
+    """/latest, /search, /portal, and /digest must resolve to their own
+    handlers, not fall into get_article(article_id: int) and 422 on type
+    coercion — this only holds if the dynamic route is registered last."""
     async with await _client(db_session) as client:
         latest = await client.get("/api/news/latest")
         search = await client.get("/api/news/search", params={"q": "bitcoin"})
         portal = await client.get("/api/news/portal")
+        digest = await client.get("/api/news/digest", params={"topic": "AI"})
 
     assert latest.status_code == 200
     assert search.status_code == 200
     assert portal.status_code == 200
+    assert digest.status_code == 404  # no digest generated yet — still a real 404, not a 422
+
+
+@pytest.mark.asyncio
+async def test_digest_endpoint_rejects_unknown_topic(db_session):
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/digest", params={"topic": "SPORTS"})
+
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_digest_endpoint_404_when_none_generated_yet(db_session):
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/digest", params={"topic": "AI"})
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_digest_endpoint_returns_the_latest_stored_digest(db_session):
+    await insert_news_digest(
+        db_session,
+        NewsDigestResult(topic="AI", summary="AI is moving fast.", highlights=["A", "B"], article_count=3),
+    )
+
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/digest", params={"topic": "AI"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["topic"] == "AI"
+    assert body["summary"] == "AI is moving fast."
+    assert body["highlights"] == ["A", "B"]
+    assert body["articleCount"] == 3
+    assert body["generatedAt"]

@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     # RSS feeds have no rate-limit concern like Alpha Vantage, so this can
     # poll far more often — see app/intelligence/news/.
     news_poll_interval_seconds: float = 600.0  # 10min
+    # News Portal AI digest (app/intelligence/llm/news_digest.py) — one
+    # Claude call per portal topic per cycle, so this stays hourly rather
+    # than matching news_poll_interval_seconds.
+    news_digest_interval_seconds: float = 3_600.0  # 1h
 
     # Whale Engine (app/intelligence/whales/) — Etherscan free tier (5
     # req/sec, 100k/day, get a key at https://etherscan.io/apis). Leave

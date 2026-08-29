@@ -30,3 +30,16 @@ export interface PortalNewsPage {
   limit: number;
   offset: number;
 }
+
+/**
+ * Generated on a schedule by the backend from real ingested articles for
+ * one topic (see backend/app/intelligence/llm/news_digest.py) — narration
+ * only, every claim is grounded in the articles it was given.
+ */
+export interface NewsDigest {
+  topic: PortalTopic;
+  summary: string;
+  highlights: string[];
+  articleCount: number;
+  generatedAt: string;
+}

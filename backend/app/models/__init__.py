@@ -11,6 +11,7 @@ from app.models.llm_report import LlmReport
 from app.models.macro import MacroDataPoint
 from app.models.market_stat import MarketStat
 from app.models.news import NewsArticle
+from app.models.news_digest import NewsDigest
 from app.models.open_interest import OpenInterest
 from app.models.sentiment import SentimentScore
 from app.models.strategy_version import StrategyVersion
@@ -31,6 +32,7 @@ __all__ = [
     "MacroDataPoint",
     "MarketStat",
     "NewsArticle",
+    "NewsDigest",
     "OpenInterest",
     "SentimentScore",
     "StrategyVersion",
