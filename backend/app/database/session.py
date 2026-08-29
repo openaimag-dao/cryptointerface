@@ -1,12 +1,15 @@
 from collections.abc import AsyncGenerator
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.database.base import Base
 
 settings = get_settings()
+logger = get_logger(__name__)
 
 engine = create_async_engine(settings.database_url, pool_pre_ping=True, future=True)
 
@@ -32,6 +35,20 @@ async def _apply_lightweight_migrations(conn: AsyncConnection) -> None:
     If this list keeps growing, that's the signal to introduce Alembic
     against this same metadata (`Base.metadata`) instead of extending it
     further — this is a deliberate stop-gap, not the long-term answer.
+
+    Each statement runs in its own SAVEPOINT (`conn.begin_nested()`) —
+    without this, a single bad statement (e.g. an index build that hits a
+    lock timeout, or any other transient error) would abort the *shared*
+    outer transaction this function runs in, which Postgres then silently
+    rolls back in full, including every `ADD COLUMN` that had already
+    "succeeded" earlier in this same call. That previously surfaced as a
+    genuine production incident: every `NewsArticle` query 500ing (even a
+    lookup for a nonexistent id, which never reaches Pydantic/response
+    code — the SELECT itself failed) while completely unrelated tables
+    kept working fine, because the whole migration batch silently never
+    committed and the app came up anyway. A per-statement savepoint means
+    one bad statement is logged and skipped, not a silent, total rollback
+    of this entire function with no visible startup error.
     """
     statements = [
         "ALTER TABLE news ADD COLUMN IF NOT EXISTS slug VARCHAR(140)",
@@ -51,7 +68,11 @@ async def _apply_lightweight_migrations(conn: AsyncConnection) -> None:
         "setweight(to_tsvector('english', summary), 'B')))",
     ]
     for statement in statements:
-        await conn.execute(text(statement))
+        try:
+            async with conn.begin_nested():
+                await conn.execute(text(statement))
+        except DBAPIError:
+            logger.warning("lightweight_migration_statement_failed", extra={"statement": statement}, exc_info=True)
 
 
 async def init_models() -> None:
