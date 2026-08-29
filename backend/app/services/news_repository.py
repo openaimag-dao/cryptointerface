@@ -134,6 +134,28 @@ async def get_portal_news_page(
     return list(result.scalars().all()), total
 
 
+async def get_articles_by_editorial_status(
+    db: AsyncSession, status: str, limit: int = 30, offset: int = 0
+) -> tuple[list[NewsArticle], int]:
+    """Admin moderation queue (app/api/admin.py) — real DB-level
+    pagination, same shape as `get_portal_news_page`."""
+    base_stmt = select(NewsArticle).where(NewsArticle.editorial_status == status)
+    count_stmt = select(func.count()).select_from(NewsArticle).where(NewsArticle.editorial_status == status)
+
+    total = (await db.execute(count_stmt)).scalar_one()
+    stmt = base_stmt.order_by(NewsArticle.published_at.desc()).limit(limit).offset(offset)
+    result = await db.execute(stmt)
+    return list(result.scalars().all()), total
+
+
+async def get_editorial_status_counts(db: AsyncSession) -> dict[str, int]:
+    """One count per EDITORIAL_STATUSES value — the admin overview's
+    "Draft: 3, Pending Review: 12, Published: 1,248" tallies."""
+    stmt = select(NewsArticle.editorial_status, func.count()).group_by(NewsArticle.editorial_status)
+    result = await db.execute(stmt)
+    return dict(result.all())
+
+
 async def search_news(db: AsyncSession, query: str, limit: int = 30) -> list[NewsArticle]:
     pattern = f"%{query}%"
     stmt = (

@@ -591,6 +591,39 @@ forbids inventing anything not present in the input.
   that article — the frontend should fall back to the raw `summary` field
   when it's null, same as it already does before any processing has run.
 
+## News Platform: editorial workflow + admin panel
+
+`app/api/admin.py` — moderation endpoints for `NewsArticle.editorial_status`
+(`app/models/news.py::EDITORIAL_STATUSES` — IMPORTED, PROCESSING,
+PENDING_REVIEW, APPROVED, PUBLISHED, REJECTED, ARCHIVED). Every route on
+the router requires `role="admin"` (`Depends(get_current_admin_user)`,
+`app/api/deps.py`), applied once at the router level rather than per
+endpoint.
+
+- `GET /api/admin/news?status=PENDING_REVIEW&limit=&offset=` — paginated
+  moderation queue for one status (`app/services/news_repository.py::
+  get_articles_by_editorial_status`), 400 for an unrecognized status.
+- `GET /api/admin/news/counts` — one tally per status
+  (`get_editorial_status_counts`) for the admin overview screen.
+- `PATCH /api/admin/news/{id}` — edit `title`/`summary`/`category`/
+  `portalTopic`/`editorialStatus` (all fields optional, only supplied
+  ones are changed); 404 for an unknown article id, 400 for an
+  unrecognized `editorialStatus`.
+
+**Becoming an admin is deliberately not self-service.** Registration
+(`POST /api/auth/register`) always creates `role="user"`; there is no API
+path to role="admin" — `get_current_admin_user` re-checks the
+DB-persisted role on every request (not the JWT's embedded role, which
+could be stale after a demotion). The only way to create the first admin
+is the one-off script:
+
+```
+cd backend && .venv/bin/python -m scripts.promote_to_admin someone@example.com
+```
+
+The user must already be registered; the script exits 1 with a message if
+the email isn't found.
+
 ## News Platform: real user accounts
 
 Real accounts (`app/services/auth_service.py`, `app/api/auth.py`,

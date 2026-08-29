@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
+    admin,
     ai,
     assets,
     auth,
@@ -182,6 +183,10 @@ app.include_router(portfolio.router)
 # private dashboard — the public News Portal never requires one.
 app.include_router(auth.router)
 app.include_router(user.router)
+
+# News Platform: editorial workflow admin API — every route requires
+# role="admin" (app/api/deps.py::get_current_admin_user).
+app.include_router(admin.router)
 
 
 @app.get("/api/health", tags=["health"])
