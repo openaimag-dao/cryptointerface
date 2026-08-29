@@ -96,6 +96,66 @@ _CATEGORY_KEYWORDS: dict[str, list[str]] = {
     "Technology": ["upgrade", "mainnet", "protocol", "layer 2", "rollup"],
 }
 
+# Editorial taxonomy for the public news portal (Sprint 7) — separate from
+# `_CATEGORY_KEYWORDS` above, which is a market-structure classification
+# the trading terminal's news tab (and nothing else) reads. Whichever topic
+# has the most keyword hits wins; a tie or zero hits falls back to the
+# article's source's own `default_topic` (see `sources.py`) rather than a
+# fabricated guess — a CoinDesk piece with no distinctive AI/blockchain-
+# infra/startup language is still, correctly, just crypto news.
+_PORTAL_TOPIC_KEYWORDS: dict[str, list[str]] = {
+    "AI": [
+        "artificial intelligence",
+        "machine learning",
+        "chatgpt",
+        "openai",
+        "llm",
+        "large language model",
+        "generative ai",
+        "neural network",
+        "anthropic",
+        "gemini",
+        "copilot",
+        "chatbot",
+    ],
+    "BLOCKCHAIN": [
+        "blockchain",
+        "layer 2",
+        "rollup",
+        "smart contract",
+        "consensus",
+        "validator",
+        "mainnet",
+        "protocol upgrade",
+        "zero-knowledge",
+        "zk-rollup",
+        "interoperability",
+    ],
+    "CRYPTO": [
+        "bitcoin",
+        "ethereum",
+        "crypto",
+        "token",
+        "altcoin",
+        "exchange",
+        "trading",
+        "market cap",
+        "bull market",
+        "bear market",
+        "stablecoin",
+    ],
+    "INNOVATION": [
+        "startup",
+        "venture capital",
+        "funding round",
+        "innovation",
+        "robotics",
+        "quantum computing",
+        "biotech",
+        "space",
+    ],
+}
+
 BASE_IMPACT_SCORE = 30.0
 HIGH_IMPACT_POINTS = 15.0
 SYMBOL_MENTION_POINTS = 5.0
@@ -113,6 +173,17 @@ class NewsClassification:
 
 def _count_hits(text: str, keywords: list[str]) -> int:
     return sum(1 for keyword in keywords if keyword in text)
+
+
+def classify_portal_topic(text: str, default_topic: str = "CRYPTO") -> str:
+    """Picks whichever portal topic has the most keyword hits; falls back
+    to `default_topic` (the source's own default) on a tie or zero hits."""
+    lowered = text.lower()
+    scores = {topic: _count_hits(lowered, keywords) for topic, keywords in _PORTAL_TOPIC_KEYWORDS.items()}
+    best_topic = max(scores, key=lambda topic: scores[topic])
+    if scores[best_topic] == 0:
+        return default_topic
+    return best_topic
 
 
 def detect_symbols(text: str) -> list[str]:

@@ -1,4 +1,4 @@
-from app.intelligence.news.classifier import classify, detect_symbols
+from app.intelligence.news.classifier import classify, classify_portal_topic, detect_symbols
 
 
 def test_detect_symbols_matches_watchlist_assets():
@@ -54,4 +54,25 @@ def test_classify_impact_score_bounded():
 def test_classify_deterministic_same_input_same_output():
     first = classify("Bitcoin rallies", "Institutional adoption grows")
     second = classify("Bitcoin rallies", "Institutional adoption grows")
+    assert first == second
+
+
+def test_portal_topic_matches_ai_keywords_over_source_default():
+    topic = classify_portal_topic("OpenAI releases new large language model", default_topic="CRYPTO")
+    assert topic == "AI"
+
+
+def test_portal_topic_matches_blockchain_keywords():
+    topic = classify_portal_topic("Layer 2 rollup upgrade improves smart contract throughput", default_topic="CRYPTO")
+    assert topic == "BLOCKCHAIN"
+
+
+def test_portal_topic_falls_back_to_source_default_without_keyword_hits():
+    assert classify_portal_topic("Weekly market recap", default_topic="CRYPTO") == "CRYPTO"
+    assert classify_portal_topic("Weekly market recap", default_topic="INNOVATION") == "INNOVATION"
+
+
+def test_portal_topic_deterministic_same_input_same_output():
+    first = classify_portal_topic("Bitcoin ETF inflows hit record high", default_topic="CRYPTO")
+    second = classify_portal_topic("Bitcoin ETF inflows hit record high", default_topic="CRYPTO")
     assert first == second

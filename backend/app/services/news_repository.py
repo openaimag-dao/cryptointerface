@@ -7,7 +7,7 @@ to call every cycle without accumulating duplicate rows.
 
 from datetime import UTC, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +35,7 @@ async def insert_article(
     impact_score: float,
     sentiment: str,
     category: str,
+    portal_topic: str | None = None,
 ) -> bool:
     """Returns True if this was a genuinely new article (not a dupe)."""
     stmt = (
@@ -50,6 +51,7 @@ async def insert_article(
             impact_score=impact_score,
             sentiment=sentiment,
             category=category,
+            portal_topic=portal_topic,
         )
         .on_conflict_do_nothing(index_elements=["url"])
         .returning(NewsArticle.id)
@@ -60,16 +62,47 @@ async def insert_article(
 
 
 async def get_latest_news(
-    db: AsyncSession, limit: int = 30, symbol: str | None = None, category: str | None = None
+    db: AsyncSession,
+    limit: int = 30,
+    symbol: str | None = None,
+    category: str | None = None,
+    topic: str | None = None,
 ) -> list[NewsArticle]:
-    stmt = select(NewsArticle).order_by(NewsArticle.published_at.desc()).limit(limit if symbol is None else 500)
+    stmt = (
+        select(NewsArticle).order_by(NewsArticle.published_at.desc()).limit(limit if symbol is None else 500)
+    )
     if category is not None:
         stmt = stmt.where(NewsArticle.category == category)
+    if topic is not None:
+        stmt = stmt.where(NewsArticle.portal_topic == topic)
     result = await db.execute(stmt)
     articles = list(result.scalars().all())
     if symbol is not None:
         articles = [a for a in articles if symbol in a.symbols][:limit]
     return articles
+
+
+async def get_article_by_id(db: AsyncSession, article_id: int) -> NewsArticle | None:
+    return await db.get(NewsArticle, article_id)
+
+
+async def get_portal_news_page(
+    db: AsyncSession, topic: str | None = None, limit: int = 30, offset: int = 0
+) -> tuple[list[NewsArticle], int]:
+    """Paginated portal listing (real DB-level LIMIT/OFFSET, unlike the
+    Python-side filtering `get_latest_news` does for the symbol filter —
+    a public portal listing page needs real pagination, not a 500-row
+    fetch-then-slice). Returns (articles, total_count) for the topic."""
+    base_stmt = select(NewsArticle)
+    count_stmt = select(func.count()).select_from(NewsArticle)
+    if topic is not None:
+        base_stmt = base_stmt.where(NewsArticle.portal_topic == topic)
+        count_stmt = count_stmt.where(NewsArticle.portal_topic == topic)
+
+    total = (await db.execute(count_stmt)).scalar_one()
+    stmt = base_stmt.order_by(NewsArticle.published_at.desc()).limit(limit).offset(offset)
+    result = await db.execute(stmt)
+    return list(result.scalars().all()), total
 
 
 async def search_news(db: AsyncSession, query: str, limit: int = 30) -> list[NewsArticle]:

@@ -14,6 +14,14 @@ class NewsArticle(Base, IdMixin, CreatedAtMixin):
     `sentiment`/`category` are all computed once at ingest time by the
     deterministic classifier (`app/intelligence/news/classifier.py`) — no
     LLM call per article, see that module's docstring for why.
+
+    `portal_topic` (CRYPTO/AI/BLOCKCHAIN/INNOVATION) is a separate,
+    editorial taxonomy for the public news portal (Sprint 7) — deliberately
+    not the same field as `category` (Security/Regulation/Institutional/
+    DeFi/Technology/Market), which is a market-structure classification the
+    trading terminal's news tab uses and which nothing else reads. Nullable
+    because it's assigned by `classify_portal_topic()` at ingest; rows never
+    get backfilled with a guess.
     """
 
     __tablename__ = "news"
@@ -32,3 +40,4 @@ class NewsArticle(Base, IdMixin, CreatedAtMixin):
     impact_score: Mapped[float] = mapped_column(Float, nullable=False)
     sentiment: Mapped[str] = mapped_column(String(8), nullable=False)  # BULLISH | BEARISH | NEUTRAL
     category: Mapped[str] = mapped_column(String(32), nullable=False)
+    portal_topic: Mapped[str | None] = mapped_column(String(16), nullable=True)  # CRYPTO|AI|BLOCKCHAIN|INNOVATION

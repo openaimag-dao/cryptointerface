@@ -14,3 +14,11 @@ class NewsItem(CamelModel):
     impact_score: float
     sentiment: Sentiment
     category: str
+    portal_topic: str | None
+
+
+class PortalNewsPage(CamelModel):
+    items: list[NewsItem]
+    total: int
+    limit: int
+    offset: int
