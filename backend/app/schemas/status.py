@@ -16,6 +16,7 @@ class EngineStatus(CamelModel):
     environment: str
     database_connected: bool
     redis_connected: bool
+    ai_configured: bool
     binance_ws_state: ConnectionState
     tracked_symbols: list[str]
     tracked_timeframes: list[str]

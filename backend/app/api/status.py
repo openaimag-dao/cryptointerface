@@ -39,6 +39,7 @@ async def get_status(db: AsyncSession = Depends(get_db)) -> EngineStatus:
         environment=settings.environment,
         database_connected=database_connected,
         redis_connected=redis_connected,
+        ai_configured=bool(settings.anthropic_api_key),
         binance_ws_state=engine_state.overall_ws_state,
         tracked_symbols=settings.symbol_list,
         tracked_timeframes=settings.timeframe_list,
