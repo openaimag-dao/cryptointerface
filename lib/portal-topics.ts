@@ -22,3 +22,7 @@ export const PORTAL_TOPICS: PortalTopicDef[] = [
 export function portalTopicForSlug(slug: string): PortalTopicDef | undefined {
   return PORTAL_TOPICS.find((topic) => topic.slug === slug);
 }
+
+export function portalTopicForValue(value: PortalTopic): PortalTopicDef | undefined {
+  return PORTAL_TOPICS.find((topic) => topic.value === value);
+}

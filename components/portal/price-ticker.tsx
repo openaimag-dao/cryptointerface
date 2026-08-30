@@ -15,7 +15,7 @@ export async function PriceTicker() {
 
   return (
     <div className="border-b border-border-strong bg-surface/60">
-      <div className="mx-auto flex max-w-6xl gap-6 overflow-x-auto px-6 py-2 text-xs">
+      <div className="mx-auto flex max-w-screen-2xl gap-6 overflow-x-auto px-6 py-2 text-xs">
         {assets.map((asset) => {
           const isUp = asset.changePercent24h >= 0;
           return (

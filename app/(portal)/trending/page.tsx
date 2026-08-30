@@ -71,7 +71,7 @@ export default async function TrendingPage({ searchParams }: TrendingPageProps) 
               <span className="absolute -left-2 -top-2 z-10 flex size-6 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-foreground">
                 {index + 1}
               </span>
-              <PortalNewsCard news={item} />
+              <PortalNewsCard news={item} lang={lang} />
             </div>
           ))}
         </div>

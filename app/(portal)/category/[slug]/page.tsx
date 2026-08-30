@@ -4,14 +4,16 @@ import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/common/page-header";
 import { DigestCard } from "@/components/portal/digest-card";
+import { HeadlineListWidget } from "@/components/portal/headline-list-widget";
 import { PortalNewsCard } from "@/components/portal/news-card";
 import { PortalPagination } from "@/components/portal/pagination";
 import { parsePageParam } from "@/lib/pagination";
-import { portalTopicForSlug } from "@/lib/portal-topics";
+import { PORTAL_TOPICS, portalTopicForSlug } from "@/lib/portal-topics";
 import { PORTAL_LANGUAGE_COOKIE, portalStrings, resolvePortalLanguage, topicStrings } from "@/lib/portal-i18n";
 import { fetchNewsDigest, fetchPortalNews } from "@/services/news-service";
 
 const PAGE_SIZE = 24;
+const OTHER_SECTIONS_WIDGET_SIZE = 4;
 
 interface CategoryPageProps {
   params: Promise<{ slug: string }>;
@@ -41,10 +43,18 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
   const lang = resolvePortalLanguage((await cookies()).get(PORTAL_LANGUAGE_COOKIE)?.value);
   const t = portalStrings(lang);
   const localizedTopic = topicStrings(lang, topic.value);
-  const [result, digest] = await Promise.all([
+  // The other sections, for a "keep reading elsewhere" rail — real portal
+  // category pages always cross-link into sibling sections rather than
+  // dead-ending once you've read everything here.
+  const otherTopics = PORTAL_TOPICS.filter((otherTopic) => otherTopic.slug !== topic.slug);
+  const [result, digest, otherSectionPages] = await Promise.all([
     fetchPortalNews(topic.value, PAGE_SIZE, (page - 1) * PAGE_SIZE, lang),
     page === 1 ? fetchNewsDigest(topic.value) : Promise.resolve(null),
+    page === 1
+      ? Promise.all(otherTopics.map((t) => fetchPortalNews(t.value, OTHER_SECTIONS_WIDGET_SIZE, 0, lang)))
+      : Promise.resolve([]),
   ]);
+  const otherSectionWidgets = otherSectionPages.map((p) => p?.items ?? []);
   const items = result?.items ?? [];
   const totalPages = result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1;
 
@@ -52,17 +62,34 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
     <div className="space-y-8">
       <PageHeader title={localizedTopic.label} description={localizedTopic.description} serif />
 
-      {digest ? <DigestCard digest={digest} /> : null}
+      {digest ? <DigestCard digest={digest} lang={lang} /> : null}
 
-      {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t.categoryNoArticles(localizedTopic.label)}</p>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {items.map((item) => (
-            <PortalNewsCard key={item.id} news={item} />
-          ))}
-        </div>
-      )}
+      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t.categoryNoArticles(localizedTopic.label)}</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {items.map((item) => (
+              <PortalNewsCard key={item.id} news={item} lang={lang} />
+            ))}
+          </div>
+        )}
+
+        {otherSectionWidgets.some((widgetItems) => widgetItems.length > 0) ? (
+          <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
+            {otherTopics.map((otherTopic, index) => (
+              <HeadlineListWidget
+                key={otherTopic.slug}
+                title={topicStrings(lang, otherTopic.value).label}
+                items={otherSectionWidgets[index] ?? []}
+                lang={lang}
+                seeAllHref={`/category/${otherTopic.slug}`}
+                seeAllLabel={t.homeSeeAll}
+              />
+            ))}
+          </aside>
+        ) : null}
+      </div>
 
       <PortalPagination basePath={`/category/${topic.slug}`} page={page} totalPages={totalPages} />
     </div>

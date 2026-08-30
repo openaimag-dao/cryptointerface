@@ -1,19 +1,21 @@
 import { Sparkles } from "lucide-react";
 
 import { timeAgo } from "@/lib/utils";
+import { portalStrings, type PortalLanguage } from "@/lib/portal-i18n";
 import type { NewsDigest } from "@/types";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
-export function DigestCard({ digest }: { digest: NewsDigest }) {
+export function DigestCard({ digest, lang = "en" }: { digest: NewsDigest; lang?: PortalLanguage }) {
+  const t = portalStrings(lang);
   return (
     <Card className="border-accent/20 bg-accent-dim/40">
       <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
         <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-accent">
           <Sparkles className="size-3.5" />
-          AI Digest
+          {t.digestLabel}
         </span>
         <span className="text-xs text-muted-foreground">
-          From {digest.articleCount} articles · {timeAgo(digest.generatedAt)}
+          {t.digestFrom(digest.articleCount)} · {timeAgo(digest.generatedAt, lang)}
         </span>
       </CardHeader>
       <CardContent className="pt-0">

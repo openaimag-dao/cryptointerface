@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { timeAgo } from "@/lib/utils";
+import type { PortalLanguage } from "@/lib/portal-i18n";
 import type { NewsItem } from "@/types";
 import { ArticleImage } from "@/components/portal/article-image";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -13,9 +14,10 @@ interface PortalNewsCardProps {
   // bigger serif headline — everything else (grid cards, trending,
   // search results) uses the compact layout.
   featured?: boolean;
+  lang?: PortalLanguage;
 }
 
-export function PortalNewsCard({ news, featured }: PortalNewsCardProps) {
+export function PortalNewsCard({ news, featured, lang = "en" }: PortalNewsCardProps) {
   return (
     <Card className="h-full overflow-hidden transition-colors hover:border-border-strong">
       {news.imageUrl ? (
@@ -62,7 +64,7 @@ export function PortalNewsCard({ news, featured }: PortalNewsCardProps) {
           ))}
         </div>
 
-        <div className="mt-4 text-xs text-muted-foreground">{timeAgo(news.publishedAt)}</div>
+        <div className="mt-4 text-xs text-muted-foreground">{timeAgo(news.publishedAt, lang)}</div>
       </CardContent>
     </Card>
   );

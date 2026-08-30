@@ -47,6 +47,8 @@ interface PortalStrings {
   articleReadFullAt: (source: string) => string;
   articleAiSummary: string;
   articleAiSummaryDisclaimer: string;
+  digestLabel: string;
+  digestFrom: (n: number) => string;
   footerTagline: string;
 }
 
@@ -78,6 +80,8 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
     articleAiSummary: "AI Summary",
     articleAiSummaryDisclaimer:
       "Generated from this article by AIMAG's AI — always verify against the original reporting below.",
+    digestLabel: "AI Digest",
+    digestFrom: (n) => `From ${n} article${n === 1 ? "" : "s"}`,
     footerTagline:
       "Crypto, AI, Blockchain & Innovation headlines — aggregated from real sources and classified automatically. Every story links back to its original publisher.",
   },
@@ -108,6 +112,11 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
     articleAiSummary: "ИИ-резюме",
     articleAiSummaryDisclaimer:
       "Сгенерировано ИИ AIMAG на основе этой статьи — всегда сверяйтесь с оригинальным источником ниже.",
+    digestLabel: "ИИ-дайджест",
+    // Sidesteps Russian numeral-noun agreement (1 статья / 2 статьи / 5
+    // статей) the same way timeAgo() does — a fixed invariant label
+    // reads naturally in Russian regardless of the count.
+    digestFrom: (n) => `Источников: ${n}`,
     footerTagline:
       "Новости о крипте, ИИ, блокчейне и инновациях — собраны из реальных источников и классифицированы автоматически. Каждая новость ведёт к оригинальному источнику.",
   },
@@ -138,6 +147,8 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
     articleAiSummary: "ЖИ түйіндемесі",
     articleAiSummaryDisclaimer:
       "Бұл мақала негізінде AIMAG ЖИ жасаған — әрқашан төмендегі түпнұсқа дереккөзбен салыстырыңыз.",
+    digestLabel: "ЖИ дайджесті",
+    digestFrom: (n) => `Дереккөздер: ${n}`,
     footerTagline:
       "Крипто, ЖИ, блокчейн және инновациялар туралы жаңалықтар — нақты дереккөздерден жиналып, автоматты түрде жіктелген. Әр жаңалық түпнұсқа дереккөзге сілтеме береді.",
   },

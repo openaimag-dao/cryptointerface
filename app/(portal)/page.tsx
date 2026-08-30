@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 
+import { HeadlineListWidget } from "@/components/portal/headline-list-widget";
 import { PortalNewsCard } from "@/components/portal/news-card";
 import { PortalPagination } from "@/components/portal/pagination";
 import { parsePageParam } from "@/lib/pagination";
@@ -9,6 +10,9 @@ import { PORTAL_LANGUAGE_COOKIE, portalStrings, resolvePortalLanguage, topicStri
 import { fetchPortalNews, fetchTrendingNews } from "@/services/news-service";
 
 const PAGE_SIZE = 24;
+// Each left-rail topic module: enough to feel like a real "block" without
+// dwarfing the main feed next to it.
+const TOPIC_WIDGET_SIZE = 4;
 
 interface PortalHomePageProps {
   searchParams: Promise<{ page?: string }>;
@@ -21,10 +25,17 @@ export default async function PortalHomePage({ searchParams }: PortalHomePagePro
   const lang = resolvePortalLanguage((await cookies()).get(PORTAL_LANGUAGE_COOKIE)?.value);
   const t = portalStrings(lang);
 
-  const [result, trending] = await Promise.all([
+  const [result, trending, topicWidgetPages] = await Promise.all([
     fetchPortalNews(undefined, PAGE_SIZE, (page - 1) * PAGE_SIZE, lang),
     isFirstPage ? fetchTrendingNews(undefined, 6, lang) : Promise.resolve([]),
+    // Left rail: one "block in block" module per section, latest-first so
+    // it never sits empty for a niche topic the way a trending list
+    // (which needs real cross-source coverage) sometimes does.
+    isFirstPage
+      ? Promise.all(PORTAL_TOPICS.map((topic) => fetchPortalNews(topic.value, TOPIC_WIDGET_SIZE, 0, lang)))
+      : Promise.resolve([]),
   ]);
+  const topicWidgets = topicWidgetPages.map((topicPage) => topicPage?.items ?? []);
   const items = result?.items ?? [];
   const totalPages = result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1;
 
@@ -53,40 +64,43 @@ export default async function PortalHomePage({ searchParams }: PortalHomePagePro
       {items.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t.homeNoArticles}</p>
       ) : (
-        <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-3">
-          <div className="space-y-8 lg:col-span-2">
-            {hero ? <PortalNewsCard news={hero} featured /> : null}
+        <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[260px_minmax(0,1fr)_300px]">
+          <aside className="hidden space-y-6 xl:block">
+            {PORTAL_TOPICS.map((topic, index) => (
+              <HeadlineListWidget
+                key={topic.slug}
+                title={topicStrings(lang, topic.value).label}
+                items={topicWidgets[index] ?? []}
+                lang={lang}
+                seeAllHref={`/category/${topic.slug}`}
+                seeAllLabel={t.homeSeeAll}
+              />
+            ))}
+          </aside>
+
+          <div className="space-y-8">
+            {hero ? <PortalNewsCard news={hero} featured lang={lang} /> : null}
 
             {gridItems.length > 0 ? (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {gridItems.map((item) => (
-                  <PortalNewsCard key={item.id} news={item} />
+                  <PortalNewsCard key={item.id} news={item} lang={lang} />
                 ))}
               </div>
             ) : null}
           </div>
 
           {sidebarTrending.length > 0 ? (
-            <aside className="space-y-4">
-              <div className="flex items-center justify-between border-b border-border-strong pb-2">
-                <h2 className="font-serif text-lg font-semibold text-foreground">{t.homeTrendingNow}</h2>
-                <Link href="/trending" className="text-xs font-medium text-accent hover:underline">
-                  {t.homeSeeAll}
-                </Link>
-              </div>
-              <ol className="space-y-4">
-                {sidebarTrending.map((item, index) => (
-                  <li key={item.id} className="flex gap-3">
-                    <span className="font-serif text-2xl font-semibold text-border-strong">{index + 2}</span>
-                    <Link href={`/article/${item.id}`} className="group/link min-w-0">
-                      <h3 className="text-sm font-semibold leading-snug text-foreground transition-colors group-hover/link:text-accent">
-                        {item.title}
-                      </h3>
-                      <p className="mt-1 text-xs text-muted-foreground">{item.source}</p>
-                    </Link>
-                  </li>
-                ))}
-              </ol>
+            <aside className="lg:sticky lg:top-6 lg:self-start">
+              <HeadlineListWidget
+                title={t.homeTrendingNow}
+                items={sidebarTrending}
+                lang={lang}
+                seeAllHref="/trending"
+                seeAllLabel={t.homeSeeAll}
+                numbered
+                leadImage
+              />
             </aside>
           ) : null}
         </div>

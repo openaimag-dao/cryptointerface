@@ -23,7 +23,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
       <header className="border-b border-border-strong">
         {/* Utility bar: date + language + account, small and out of the
             way — a masthead detail, not the focal point. */}
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-2 text-xs text-muted-foreground">
+        <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-6 py-2 text-xs text-muted-foreground">
           <span>{today}</span>
           <div className="flex items-center gap-4">
             <LanguageSwitcher current={lang} />
@@ -43,7 +43,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
         </div>
         <div className="border-t border-border-subtle">
           {/* Wordmark: serif, centered — the masthead. */}
-          <div className="mx-auto max-w-6xl px-6 py-6 text-center">
+          <div className="mx-auto max-w-screen-2xl px-6 py-6 text-center">
             <Link href="/" className="font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
               AIMAG <span className="text-accent">News</span>
             </Link>
@@ -51,7 +51,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
           </div>
         </div>
         <nav className="border-t border-border-strong">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-6 gap-y-2 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-center gap-x-6 gap-y-2 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {PORTAL_TOPICS.map((topic) => (
               <Link key={topic.slug} href={`/category/${topic.slug}`} className="transition-colors hover:text-accent">
                 {topicStrings(lang, topic.value).label}
@@ -66,7 +66,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
           </div>
         </nav>
       </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">{children}</main>
+      <main className="mx-auto w-full max-w-screen-2xl flex-1 px-6 py-10">{children}</main>
       <footer className="border-t border-border-strong px-6 py-8 text-center text-xs text-muted-foreground">
         <p className="font-serif text-sm text-foreground">AIMAG News</p>
         <p className="mt-2">{t.footerTagline}</p>

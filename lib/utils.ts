@@ -37,13 +37,24 @@ export function formatUtcClock(date: Date): string {
   });
 }
 
-export function timeAgo(iso: string): string {
+const TIME_AGO_UNITS = {
+  en: { justNow: "just now", minute: "m ago", hour: "h ago", day: "d ago" },
+  // Abbreviated units ("мин.", "ч.", "дн.") deliberately sidestep Russian/
+  // Kazakh plural-form agreement (1 минута / 2 минуты / 5 минут), the way
+  // real news UIs do — spelling every count out correctly would need a
+  // full plural-rules table for three units in two languages.
+  ru: { justNow: "только что", minute: " мин. назад", hour: " ч. назад", day: " дн. назад" },
+  kk: { justNow: "жаңа ғана", minute: " мин. бұрын", hour: " сағ. бұрын", day: " күн бұрын" },
+} as const;
+
+export function timeAgo(iso: string, lang: keyof typeof TIME_AGO_UNITS = "en"): string {
+  const units = TIME_AGO_UNITS[lang];
   const diffMs = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return units.justNow;
+  if (minutes < 60) return `${minutes}${units.minute}`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return `${hours}${units.hour}`;
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return `${days}${units.day}`;
 }
