@@ -8,12 +8,35 @@ this locks in that it actually adds the missing columns, and that it's
 safe to call repeatedly (every app startup calls it unconditionally).
 """
 
+import re
+
 import pytest
 from sqlalchemy import text
 
 from app.database.base import Base
-from app.database.session import _apply_lightweight_migrations, engine
+from app.database.session import _MIGRATION_STATEMENTS, _apply_lightweight_migrations, engine
 from app.models.news import NewsArticle
+
+# The columns the `news` table had before any lightweight migration ever
+# ran (i.e. what `create_all` alone would produce for a table that's
+# existed since before this mechanism was introduced). Every column added
+# to NewsArticle since then must have a matching `ALTER TABLE ... ADD
+# COLUMN` statement, or production rows created before the column existed
+# never get it — see test_migration_columns_match_the_current_news_article_model.
+_ORIGINAL_NEWS_COLUMNS = {
+    "id",
+    "created_at",
+    "source",
+    "title",
+    "summary",
+    "url",
+    "published_at",
+    "language",
+    "symbols",
+    "impact_score",
+    "sentiment",
+    "category",
+}
 
 
 @pytest.mark.asyncio
@@ -131,7 +154,18 @@ async def test_one_failing_statement_does_not_roll_back_the_others():
 
 
 def test_migration_columns_match_the_current_news_article_model():
-    """If a future column is added to NewsArticle without a matching
-    ALTER statement, this is the tripwire that should catch it."""
+    """Regression test for a real production incident: `portal_topic` was
+    added to NewsArticle with no matching `ALTER TABLE ... ADD COLUMN`
+    statement in `_apply_lightweight_migrations`, so it never reached the
+    live `news` table and every query against it 500'd (see that
+    function's docstring). This diffs the model's columns against the
+    columns the migration statements actually add, so any future column
+    added to NewsArticle without a matching statement fails the build
+    instead of production."""
     model_columns = {c.name for c in NewsArticle.__table__.columns}
-    assert {"slug", "editorial_status", "news_event_id", "author_id", "ai_summary"} <= model_columns
+    added_columns = {
+        match.group(1)
+        for statement in _MIGRATION_STATEMENTS
+        if (match := re.search(r"ADD COLUMN IF NOT EXISTS (\w+)", statement))
+    }
+    assert model_columns - _ORIGINAL_NEWS_COLUMNS == added_columns

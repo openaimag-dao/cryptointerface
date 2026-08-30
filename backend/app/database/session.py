@@ -22,6 +22,26 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
+_MIGRATION_STATEMENTS = [
+    "ALTER TABLE news ADD COLUMN IF NOT EXISTS portal_topic VARCHAR(16)",
+    "ALTER TABLE news ADD COLUMN IF NOT EXISTS slug VARCHAR(140)",
+    "ALTER TABLE news ADD COLUMN IF NOT EXISTS editorial_status VARCHAR(16) NOT NULL DEFAULT 'PUBLISHED'",
+    "ALTER TABLE news ADD COLUMN IF NOT EXISTS news_event_id BIGINT REFERENCES news_events(id)",
+    "ALTER TABLE news ADD COLUMN IF NOT EXISTS author_id BIGINT REFERENCES authors(id)",
+    "ALTER TABLE news ADD COLUMN IF NOT EXISTS ai_summary VARCHAR(1000)",
+    "ALTER TABLE news ADD COLUMN IF NOT EXISTS image_url VARCHAR(1000)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_news_slug ON news (slug)",
+    # Q6: real Postgres full-text search (news_repository.py::search_news)
+    # over title (weight A) + summary (weight B) — a GIN expression
+    # index, not a stored column, so it needs no backfill for rows that
+    # already exist. Must match search_news's expression exactly or
+    # Postgres won't use it (query stays correct, just unindexed).
+    "CREATE INDEX IF NOT EXISTS ix_news_search_vector ON news "
+    "USING gin ((setweight(to_tsvector('english', title), 'A') || "
+    "setweight(to_tsvector('english', summary), 'B')))",
+]
+
+
 async def _apply_lightweight_migrations(conn: AsyncConnection) -> None:
     """`create_all` only creates brand-new tables — it never ALTERs one
     that already exists in a running deployment, so a column added to an
@@ -49,25 +69,23 @@ async def _apply_lightweight_migrations(conn: AsyncConnection) -> None:
     committed and the app came up anyway. A per-statement savepoint means
     one bad statement is logged and skipped, not a silent, total rollback
     of this entire function with no visible startup error.
+
+    A savepoint only protects against a statement that's *present* here
+    failing — it does nothing if a column was added to the model and
+    simply never got a matching statement in the first place. That's a
+    second, distinct incident this same function has caused: `portal_topic`
+    (added to NewsArticle in the "News Portal P1" commit) shipped with no
+    `ADD COLUMN` statement at all, so every `news` SELECT 500'd in
+    production — including a lookup by a nonexistent id — because Postgres
+    doesn't have the column the ORM's SELECT lists, and this had nothing to
+    do with the transaction-rollback bug above (fixed first, but the
+    symptom didn't change, which is what pointed at a second cause).
+    `test_migration_columns_match_the_current_news_article_model` in
+    tests/test_database_migrations.py is the tripwire for this specific
+    failure mode: it fails the build if any future column added to
+    NewsArticle doesn't have a matching statement here.
     """
-    statements = [
-        "ALTER TABLE news ADD COLUMN IF NOT EXISTS slug VARCHAR(140)",
-        "ALTER TABLE news ADD COLUMN IF NOT EXISTS editorial_status VARCHAR(16) NOT NULL DEFAULT 'PUBLISHED'",
-        "ALTER TABLE news ADD COLUMN IF NOT EXISTS news_event_id BIGINT REFERENCES news_events(id)",
-        "ALTER TABLE news ADD COLUMN IF NOT EXISTS author_id BIGINT REFERENCES authors(id)",
-        "ALTER TABLE news ADD COLUMN IF NOT EXISTS ai_summary VARCHAR(1000)",
-        "ALTER TABLE news ADD COLUMN IF NOT EXISTS image_url VARCHAR(1000)",
-        "CREATE UNIQUE INDEX IF NOT EXISTS uq_news_slug ON news (slug)",
-        # Q6: real Postgres full-text search (news_repository.py::search_news)
-        # over title (weight A) + summary (weight B) — a GIN expression
-        # index, not a stored column, so it needs no backfill for rows that
-        # already exist. Must match search_news's expression exactly or
-        # Postgres won't use it (query stays correct, just unindexed).
-        "CREATE INDEX IF NOT EXISTS ix_news_search_vector ON news "
-        "USING gin ((setweight(to_tsvector('english', title), 'A') || "
-        "setweight(to_tsvector('english', summary), 'B')))",
-    ]
-    for statement in statements:
+    for statement in _MIGRATION_STATEMENTS:
         try:
             async with conn.begin_nested():
                 await conn.execute(text(statement))
