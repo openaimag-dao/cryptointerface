@@ -3,12 +3,14 @@ import { cookies } from "next/headers";
 
 import { HeadlineListWidget } from "@/components/portal/headline-list-widget";
 import { MarketMoversWidget } from "@/components/portal/market-movers-widget";
+import { MarketSnapshotWidget } from "@/components/portal/market-snapshot-widget";
 import { PortalNewsCard } from "@/components/portal/news-card";
 import { PortalPagination } from "@/components/portal/pagination";
 import { parsePageParam } from "@/lib/pagination";
 import { PORTAL_TOPICS } from "@/lib/portal-topics";
 import { PORTAL_LANGUAGE_COOKIE, portalStrings, resolvePortalLanguage, topicStrings } from "@/lib/portal-i18n";
 import { fetchPortalNews, fetchTrendingNews } from "@/services/news-service";
+import { fetchPortalMacroIndicators } from "@/services/portal-macro-service";
 import { fetchPortalPrices } from "@/services/portal-market-service";
 
 const PAGE_SIZE = 24;
@@ -27,7 +29,7 @@ export default async function PortalHomePage({ searchParams }: PortalHomePagePro
   const lang = resolvePortalLanguage((await cookies()).get(PORTAL_LANGUAGE_COOKIE)?.value);
   const t = portalStrings(lang);
 
-  const [result, trending, topicWidgetPages, marketAssets] = await Promise.all([
+  const [result, trending, topicWidgetPages, marketAssets, macroIndicators] = await Promise.all([
     fetchPortalNews(undefined, PAGE_SIZE, (page - 1) * PAGE_SIZE, lang),
     isFirstPage ? fetchTrendingNews(undefined, 6, lang) : Promise.resolve([]),
     // Left rail: one "block in block" module per section, latest-first so
@@ -37,6 +39,7 @@ export default async function PortalHomePage({ searchParams }: PortalHomePagePro
       ? Promise.all(PORTAL_TOPICS.map((topic) => fetchPortalNews(topic.value, TOPIC_WIDGET_SIZE, 0, lang)))
       : Promise.resolve([]),
     fetchPortalPrices(),
+    fetchPortalMacroIndicators(),
   ]);
   const topicWidgets = topicWidgetPages.map((topicPage) => topicPage?.items ?? []);
   const items = result?.items ?? [];
@@ -93,7 +96,7 @@ export default async function PortalHomePage({ searchParams }: PortalHomePagePro
             ) : null}
           </div>
 
-          {sidebarTrending.length > 0 || marketAssets.length > 0 ? (
+          {sidebarTrending.length > 0 || marketAssets.length > 0 || macroIndicators.length > 0 ? (
             <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
               {sidebarTrending.length > 0 ? (
                 <HeadlineListWidget
@@ -112,6 +115,7 @@ export default async function PortalHomePage({ searchParams }: PortalHomePagePro
                 gainersLabel={t.topGainers}
                 losersLabel={t.topLosers}
               />
+              <MarketSnapshotWidget indicators={macroIndicators} title={t.marketSnapshot} lang={lang} />
             </aside>
           ) : null}
         </div>

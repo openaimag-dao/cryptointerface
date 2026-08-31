@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/macro", tags=["macro"])
 # read of the same fields, kept in sync manually since one is display
 # formatting and the other is scoring math).
 _INVERTED_FIELDS = {"dxy", "vix", "us10y", "gold"}
-_NOT_SCORED_NEUTRAL_DISPLAY = {"silver", "oil", "btc_dominance"}
+_NOT_SCORED_NEUTRAL_DISPLAY = {"silver", "oil", "brent", "dow", "btc_dominance"}
 
 
 def _format_value(indicator: MacroIndicatorDef, value: float) -> str:

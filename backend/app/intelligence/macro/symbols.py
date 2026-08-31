@@ -78,6 +78,23 @@ MACRO_INDICATORS: list[MacroIndicatorDef] = [
         av_ticker="QQQ",
     ),
     MacroIndicatorDef(
+        id="dow",
+        label="Dow Jones (DIA proxy)",
+        description="Broad blue-chip equities strength; tracked for context, not scored "
+        "— overlaps heavily with S&P 500's risk-on signal.",
+        provider="alpha_vantage_etf",
+        av_ticker="DIA",
+        used_in_scoring=False,
+    ),
+    MacroIndicatorDef(
+        id="brent",
+        label="Crude Oil - Brent (BNO proxy)",
+        description="The international oil benchmark alongside WTI; tracked for context, not scored.",
+        provider="alpha_vantage_etf",
+        av_ticker="BNO",
+        used_in_scoring=False,
+    ),
+    MacroIndicatorDef(
         id="vix",
         label="VIX Volatility (VIXY proxy)",
         description="Elevated equity fear historically coincides with crypto de-risking.",

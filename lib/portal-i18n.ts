@@ -52,6 +52,7 @@ interface PortalStrings {
   marketMovers: string;
   topGainers: string;
   topLosers: string;
+  marketSnapshot: string;
   shareLabel: string;
   shareCopyLink: string;
   shareCopied: string;
@@ -92,6 +93,7 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
     marketMovers: "Market Movers",
     topGainers: "Top Gainers",
     topLosers: "Top Losers",
+    marketSnapshot: "Markets",
     shareLabel: "Share",
     shareCopyLink: "Copy link",
     shareCopied: "Copied!",
@@ -134,6 +136,7 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
     marketMovers: "Движения рынка",
     topGainers: "Растут больше всех",
     topLosers: "Падают больше всех",
+    marketSnapshot: "Мировые рынки",
     shareLabel: "Поделиться",
     shareCopyLink: "Скопировать ссылку",
     shareCopied: "Скопировано!",
@@ -173,6 +176,7 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
     marketMovers: "Нарық қозғалысы",
     topGainers: "Ең көп өскендер",
     topLosers: "Ең көп түскендер",
+    marketSnapshot: "Әлемдік нарықтар",
     shareLabel: "Бөлісу",
     shareCopyLink: "Сілтемені көшіру",
     shareCopied: "Көшірілді!",
@@ -214,4 +218,42 @@ const TOPIC_STRINGS: Record<PortalLanguage, Record<string, TopicI18n>> = {
 
 export function topicStrings(lang: PortalLanguage, topicValue: string): TopicI18n {
   return TOPIC_STRINGS[lang][topicValue] ?? TOPIC_STRINGS.en[topicValue];
+}
+
+// Display labels for the Market Snapshot widget's fixed set of indices/
+// commodities (backend/app/intelligence/macro/symbols.py's `id`s) —
+// deliberately short ("S&P 500", not the backend's "S&P 500 (SPY proxy)",
+// which is aimed at the trading terminal's more technical audience).
+const MACRO_LABELS: Record<PortalLanguage, Record<string, string>> = {
+  en: {
+    dow: "Dow Jones",
+    sp500: "S&P 500",
+    nasdaq: "Nasdaq",
+    gold: "Gold",
+    silver: "Silver",
+    oil: "Crude Oil (WTI)",
+    brent: "Crude Oil (Brent)",
+  },
+  ru: {
+    dow: "Dow Jones",
+    sp500: "S&P 500",
+    nasdaq: "Nasdaq",
+    gold: "Золото",
+    silver: "Серебро",
+    oil: "Нефть (WTI)",
+    brent: "Нефть (Brent)",
+  },
+  kk: {
+    dow: "Dow Jones",
+    sp500: "S&P 500",
+    nasdaq: "Nasdaq",
+    gold: "Алтын",
+    silver: "Күміс",
+    oil: "Мұнай (WTI)",
+    brent: "Мұнай (Brent)",
+  },
+};
+
+export function macroLabel(lang: PortalLanguage, indicatorId: string): string {
+  return MACRO_LABELS[lang][indicatorId] ?? indicatorId;
 }
