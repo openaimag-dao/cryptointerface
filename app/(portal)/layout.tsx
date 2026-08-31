@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { cookies } from "next/headers";
 
+import { Rss } from "lucide-react";
+
 import { PORTAL_TOPICS } from "@/lib/portal-topics";
 import { PORTAL_LANGUAGE_COOKIE, portalStrings, resolvePortalLanguage, topicStrings } from "@/lib/portal-i18n";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
@@ -70,6 +72,13 @@ export default async function PortalLayout({ children }: { children: ReactNode }
       <footer className="border-t border-border-strong px-6 py-8 text-center text-xs text-muted-foreground">
         <p className="font-serif text-sm text-foreground">AIMAG News</p>
         <p className="mt-2">{t.footerTagline}</p>
+        <Link
+          href="/feed.xml"
+          className="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-accent"
+        >
+          <Rss className="size-3.5" />
+          {t.rssFeed}
+        </Link>
       </footer>
     </div>
   );

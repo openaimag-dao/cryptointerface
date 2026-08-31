@@ -5,12 +5,14 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/common/page-header";
 import { DigestCard } from "@/components/portal/digest-card";
 import { HeadlineListWidget } from "@/components/portal/headline-list-widget";
+import { MarketMoversWidget } from "@/components/portal/market-movers-widget";
 import { PortalNewsCard } from "@/components/portal/news-card";
 import { PortalPagination } from "@/components/portal/pagination";
 import { parsePageParam } from "@/lib/pagination";
 import { PORTAL_TOPICS, portalTopicForSlug } from "@/lib/portal-topics";
 import { PORTAL_LANGUAGE_COOKIE, portalStrings, resolvePortalLanguage, topicStrings } from "@/lib/portal-i18n";
 import { fetchNewsDigest, fetchPortalNews } from "@/services/news-service";
+import { fetchPortalPrices } from "@/services/portal-market-service";
 
 const PAGE_SIZE = 24;
 const OTHER_SECTIONS_WIDGET_SIZE = 4;
@@ -47,12 +49,13 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
   // category pages always cross-link into sibling sections rather than
   // dead-ending once you've read everything here.
   const otherTopics = PORTAL_TOPICS.filter((otherTopic) => otherTopic.slug !== topic.slug);
-  const [result, digest, otherSectionPages] = await Promise.all([
+  const [result, digest, otherSectionPages, marketAssets] = await Promise.all([
     fetchPortalNews(topic.value, PAGE_SIZE, (page - 1) * PAGE_SIZE, lang),
     page === 1 ? fetchNewsDigest(topic.value) : Promise.resolve(null),
     page === 1
       ? Promise.all(otherTopics.map((t) => fetchPortalNews(t.value, OTHER_SECTIONS_WIDGET_SIZE, 0, lang)))
       : Promise.resolve([]),
+    fetchPortalPrices(),
   ]);
   const otherSectionWidgets = otherSectionPages.map((p) => p?.items ?? []);
   const items = result?.items ?? [];
@@ -75,7 +78,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
           </div>
         )}
 
-        {otherSectionWidgets.some((widgetItems) => widgetItems.length > 0) ? (
+        {otherSectionWidgets.some((widgetItems) => widgetItems.length > 0) || marketAssets.length > 0 ? (
           <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
             {otherTopics.map((otherTopic, index) => (
               <HeadlineListWidget
@@ -87,6 +90,12 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
                 seeAllLabel={t.homeSeeAll}
               />
             ))}
+            <MarketMoversWidget
+              assets={marketAssets}
+              title={t.marketMovers}
+              gainersLabel={t.topGainers}
+              losersLabel={t.topLosers}
+            />
           </aside>
         ) : null}
       </div>

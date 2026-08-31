@@ -58,9 +58,11 @@ export function PortalNewsCard({ news, featured, lang = "en" }: PortalNewsCardPr
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           {news.portalTopic ? <Badge variant="outline">{news.portalTopic}</Badge> : null}
           {news.symbols.map((symbol) => (
-            <Badge key={symbol} variant="outline">
-              {symbol}
-            </Badge>
+            <Link key={symbol} href={`/search?q=${symbol}`}>
+              <Badge variant="outline" className="transition-colors hover:border-accent hover:text-accent">
+                {symbol}
+              </Badge>
+            </Link>
           ))}
         </div>
 

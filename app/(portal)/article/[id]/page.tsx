@@ -7,9 +7,11 @@ import { ExternalLink, Sparkles } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { PORTAL_LANGUAGE_COOKIE, portalStrings, resolvePortalLanguage, topicStrings } from "@/lib/portal-i18n";
 import { portalTopicForValue } from "@/lib/portal-topics";
+import { SITE_URL } from "@/lib/env";
 import { fetchArticleById, fetchPortalNews } from "@/services/news-service";
 import { ArticleImage } from "@/components/portal/article-image";
 import { HeadlineListWidget } from "@/components/portal/headline-list-widget";
+import { ShareButtons } from "@/components/portal/share-buttons";
 import { Badge } from "@/components/ui/badge";
 import { SentimentBadge } from "@/components/common/sentiment-badge";
 import { SaveArticleButton } from "@/components/portal/save-article-button";
@@ -60,9 +62,30 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         .slice(0, MORE_FROM_TOPIC_SIZE) ?? []
     : [];
   const topicDef = article.portalTopic ? portalTopicForValue(article.portalTopic) : undefined;
+  const articleUrl = `${SITE_URL}/article/${article.id}`;
+
+  // schema.org NewsArticle — real Google News / rich-result eligibility,
+  // built entirely from fields already on the article (no fabricated
+  // author or organization data). `author` names the original publisher
+  // (`article.source`), consistent with how this portal already credits
+  // every story back to where it was actually reported.
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    headline: article.title,
+    description: article.summary,
+    image: article.imageUrl ? [article.imageUrl] : undefined,
+    datePublished: article.publishedAt,
+    dateModified: article.publishedAt,
+    author: { "@type": "Organization", name: article.source },
+    publisher: { "@type": "Organization", name: "AIMAG News", url: SITE_URL },
+    mainEntityOfPage: { "@type": "WebPage", "@id": articleUrl },
+    isBasedOn: article.url,
+  };
 
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-10 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
       <article className="space-y-6">
         <div>
           <Link href="/" className="text-xs text-muted-foreground transition-colors hover:text-accent">
@@ -86,11 +109,19 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
           <SentimentBadge sentiment={article.sentiment} />
           {article.portalTopic ? <Badge variant="outline">{article.portalTopic}</Badge> : null}
           {article.symbols.map((symbol) => (
-            <Badge key={symbol} variant="outline">
-              {symbol}
-            </Badge>
+            <Link key={symbol} href={`/search?q=${symbol}`}>
+              <Badge variant="outline" className="transition-colors hover:border-accent hover:text-accent">
+                {symbol}
+              </Badge>
+            </Link>
           ))}
-          <span className="ml-auto">
+          <span className="ml-auto flex items-center gap-2">
+            <ShareButtons
+              url={articleUrl}
+              title={article.title}
+              copyLabel={t.shareCopyLink}
+              copiedLabel={t.shareCopied}
+            />
             <SaveArticleButton articleId={article.id} />
           </span>
         </div>

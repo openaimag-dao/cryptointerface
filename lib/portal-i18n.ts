@@ -49,6 +49,13 @@ interface PortalStrings {
   articleAiSummaryDisclaimer: string;
   digestLabel: string;
   digestFrom: (n: number) => string;
+  marketMovers: string;
+  topGainers: string;
+  topLosers: string;
+  shareLabel: string;
+  shareCopyLink: string;
+  shareCopied: string;
+  rssFeed: string;
   footerTagline: string;
 }
 
@@ -82,6 +89,13 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
       "Generated from this article by AIMAG's AI — always verify against the original reporting below.",
     digestLabel: "AI Digest",
     digestFrom: (n) => `From ${n} article${n === 1 ? "" : "s"}`,
+    marketMovers: "Market Movers",
+    topGainers: "Top Gainers",
+    topLosers: "Top Losers",
+    shareLabel: "Share",
+    shareCopyLink: "Copy link",
+    shareCopied: "Copied!",
+    rssFeed: "RSS Feed",
     footerTagline:
       "Crypto, AI, Blockchain & Innovation headlines — aggregated from real sources and classified automatically. Every story links back to its original publisher.",
   },
@@ -117,6 +131,13 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
     // статей) the same way timeAgo() does — a fixed invariant label
     // reads naturally in Russian regardless of the count.
     digestFrom: (n) => `Источников: ${n}`,
+    marketMovers: "Движения рынка",
+    topGainers: "Растут больше всех",
+    topLosers: "Падают больше всех",
+    shareLabel: "Поделиться",
+    shareCopyLink: "Скопировать ссылку",
+    shareCopied: "Скопировано!",
+    rssFeed: "RSS-лента",
     footerTagline:
       "Новости о крипте, ИИ, блокчейне и инновациях — собраны из реальных источников и классифицированы автоматически. Каждая новость ведёт к оригинальному источнику.",
   },
@@ -149,6 +170,13 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
       "Бұл мақала негізінде AIMAG ЖИ жасаған — әрқашан төмендегі түпнұсқа дереккөзбен салыстырыңыз.",
     digestLabel: "ЖИ дайджесті",
     digestFrom: (n) => `Дереккөздер: ${n}`,
+    marketMovers: "Нарық қозғалысы",
+    topGainers: "Ең көп өскендер",
+    topLosers: "Ең көп түскендер",
+    shareLabel: "Бөлісу",
+    shareCopyLink: "Сілтемені көшіру",
+    shareCopied: "Көшірілді!",
+    rssFeed: "RSS-таспа",
     footerTagline:
       "Крипто, ЖИ, блокчейн және инновациялар туралы жаңалықтар — нақты дереккөздерден жиналып, автоматты түрде жіктелген. Әр жаңалық түпнұсқа дереккөзге сілтеме береді.",
   },
