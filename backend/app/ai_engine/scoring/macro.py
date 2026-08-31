@@ -73,8 +73,7 @@ def score_macro(snapshot: MacroSnapshot | None) -> FactorScore:
 
     if snapshot is None:
         reasons.append(
-            "Macro data not yet available (Alpha Vantage key not configured, or the scheduler hasn't "
-            "polled yet) — neutral, zero-conviction read"
+            "Macro data not yet available (the scheduler hasn't polled yet) — neutral, zero-conviction read"
         )
         details["stub"] = True
         factor = make_factor_score("macro", 50.0, reasons, details)

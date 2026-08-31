@@ -7,7 +7,7 @@ import type { MacroIndicator } from "@/types";
 function indicator(overrides: Partial<MacroIndicator>): MacroIndicator {
   return {
     id: "sp500",
-    label: "S&P 500 (SPY proxy)",
+    label: "S&P 500",
     value: "$650.00",
     changeLabel: "+0.42%",
     sentiment: "NEUTRAL",
@@ -19,14 +19,14 @@ function indicator(overrides: Partial<MacroIndicator>): MacroIndicator {
 describe("MarketSnapshotWidget", () => {
   it("renders only the indicators the backend actually returned, in the fixed display order", () => {
     // Backend order here is deliberately scrambled and missing dow/silver/
-    // brent (e.g. no ALPHA_VANTAGE_API_KEY yet, or mid rate-limit) — the
-    // widget must still show what it has, in its own fixed order, and
-    // never a placeholder for what it doesn't.
+    // brent (e.g. a Yahoo Finance hiccup this poll cycle) — the widget
+    // must still show what it has, in its own fixed order, and never a
+    // placeholder for what it doesn't.
     render(
       <MarketSnapshotWidget
         indicators={[
-          indicator({ id: "nasdaq", label: "NASDAQ 100 (QQQ proxy)", value: "$610.00", changeLabel: "-1.10%" }),
-          indicator({ id: "gold", label: "Gold Spot (GLD proxy)", value: "$310.00", changeLabel: "+0.15%" }),
+          indicator({ id: "nasdaq", label: "NASDAQ 100", value: "$610.00", changeLabel: "-1.10%" }),
+          indicator({ id: "gold", label: "Gold (COMEX Futures)", value: "$310.00", changeLabel: "+0.15%" }),
           indicator({ id: "sp500" }),
         ]}
         title="Markets"
@@ -46,7 +46,7 @@ describe("MarketSnapshotWidget", () => {
   it("shows a plain dash for an indicator with no prior reading yet, not a fabricated change", () => {
     render(
       <MarketSnapshotWidget
-        indicators={[indicator({ id: "dow", label: "Dow Jones (DIA proxy)", value: "$450.00", changeLabel: "—" })]}
+        indicators={[indicator({ id: "dow", label: "Dow Jones Industrial Average", value: "$450.00", changeLabel: "—" })]}
         title="Markets"
         lang="en"
       />,
@@ -63,7 +63,7 @@ describe("MarketSnapshotWidget", () => {
   it("uses localized labels for the given language", () => {
     render(
       <MarketSnapshotWidget
-        indicators={[indicator({ id: "gold", label: "Gold Spot (GLD proxy)" })]}
+        indicators={[indicator({ id: "gold", label: "Gold (COMEX Futures)" })]}
         title="Рынки"
         lang="ru"
       />,

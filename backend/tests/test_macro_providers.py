@@ -1,16 +1,11 @@
 import httpx
 import pytest
 
-from app.intelligence.macro.providers import AlphaVantageClient, fetch_fear_greed_index
+from app.intelligence.macro.providers import fetch_fear_greed_index, fetch_yahoo_finance_quote
 from app.services.coingecko.client import CoinGeckoRestClient
 
 
-@pytest.mark.asyncio
-async def test_fetch_fear_greed_index_parses_value(monkeypatch):
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/fng/"
-        return httpx.Response(200, json={"data": [{"value": "42", "value_classification": "Fear"}]})
-
+def _mock_client_for(monkeypatch, handler) -> None:
     original_client_cls = httpx.AsyncClient
 
     def fake_async_client(*args, **kwargs):
@@ -20,6 +15,15 @@ async def test_fetch_fear_greed_index_parses_value(monkeypatch):
     import app.intelligence.macro.providers as providers_module
 
     monkeypatch.setattr(providers_module.httpx, "AsyncClient", fake_async_client)
+
+
+@pytest.mark.asyncio
+async def test_fetch_fear_greed_index_parses_value(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/fng/"
+        return httpx.Response(200, json={"data": [{"value": "42", "value_classification": "Fear"}]})
+
+    _mock_client_for(monkeypatch, handler)
 
     value = await fetch_fear_greed_index()
     assert value == 42.0
@@ -30,88 +34,63 @@ async def test_fetch_fear_greed_index_returns_none_on_empty_data(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"data": []})
 
-    original_client_cls = httpx.AsyncClient
-
-    def fake_async_client(*args, **kwargs):
-        kwargs["transport"] = httpx.MockTransport(handler)
-        return original_client_cls(*args, **kwargs)
-
-    import app.intelligence.macro.providers as providers_module
-
-    monkeypatch.setattr(providers_module.httpx, "AsyncClient", fake_async_client)
+    _mock_client_for(monkeypatch, handler)
 
     value = await fetch_fear_greed_index()
     assert value is None
 
 
 @pytest.mark.asyncio
-async def test_alpha_vantage_get_etf_daily_close_without_key_returns_none():
-    client = AlphaVantageClient(api_key="")
-    try:
-        value = await client.get_etf_daily_close("UUP")
-    finally:
-        await client.close()
-    assert value is None
+async def test_fetch_yahoo_finance_quote_parses_regular_market_price(monkeypatch):
+    # `fetch_yahoo_finance_quote` catches every exception from the request
+    # (a real provider failure must never propagate), which would also
+    # swallow an `assert` failing inside the handler itself — so the
+    # request is captured here and checked after the call, outside that
+    # exception-handling scope, rather than asserted from within.
+    seen_requests: list[httpx.Request] = []
 
-
-@pytest.mark.asyncio
-async def test_alpha_vantage_get_etf_daily_close_parses_latest_close():
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.params["function"] == "TIME_SERIES_DAILY"
-        assert request.url.params["symbol"] == "UUP"
+        seen_requests.append(request)
         return httpx.Response(
             200,
             json={
-                "Time Series (Daily)": {
-                    "2024-01-01": {"4. close": "27.10"},
-                    "2024-01-02": {"4. close": "27.45"},
+                "chart": {
+                    "result": [{"meta": {"symbol": "^DJI", "regularMarketPrice": 53559.99}}],
+                    "error": None,
                 }
             },
         )
 
-    client = AlphaVantageClient(api_key="test-key")
-    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://www.alphavantage.co")
+    _mock_client_for(monkeypatch, handler)
 
-    try:
-        value = await client.get_etf_daily_close("UUP")
-    finally:
-        await client.close()
+    value = await fetch_yahoo_finance_quote("^DJI")
 
-    assert value == 27.45
+    assert value == 53559.99
+    assert len(seen_requests) == 1
+    assert seen_requests[0].url.path == "/v8/finance/chart/^DJI"
+    assert seen_requests[0].headers["User-Agent"]  # the one thing this endpoint actually requires
 
 
 @pytest.mark.asyncio
-async def test_alpha_vantage_get_etf_daily_close_returns_none_on_rate_limit_note():
+async def test_fetch_yahoo_finance_quote_returns_none_on_empty_result(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"Note": "Thank you for using Alpha Vantage! Our standard API..."})
+        return httpx.Response(200, json={"chart": {"result": None, "error": {"description": "Not Found"}}})
 
-    client = AlphaVantageClient(api_key="test-key")
-    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://www.alphavantage.co")
+    _mock_client_for(monkeypatch, handler)
 
-    try:
-        value = await client.get_etf_daily_close("UUP")
-    finally:
-        await client.close()
-
+    value = await fetch_yahoo_finance_quote("NOTASYMBOL")
     assert value is None
 
 
 @pytest.mark.asyncio
-async def test_alpha_vantage_get_treasury_yield_parses_latest_value():
+async def test_fetch_yahoo_finance_quote_returns_none_on_error_status(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.params["function"] == "TREASURY_YIELD"
-        assert request.url.params["maturity"] == "10year"
-        return httpx.Response(200, json={"data": [{"date": "2024-01-02", "value": "4.05"}]})
+        return httpx.Response(429, text="Edge: Too Many Requests")
 
-    client = AlphaVantageClient(api_key="test-key")
-    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://www.alphavantage.co")
+    _mock_client_for(monkeypatch, handler)
 
-    try:
-        value = await client.get_treasury_yield()
-    finally:
-        await client.close()
-
-    assert value == 4.05
+    value = await fetch_yahoo_finance_quote("^DJI")
+    assert value is None
 
 
 @pytest.mark.asyncio

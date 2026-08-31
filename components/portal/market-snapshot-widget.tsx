@@ -12,9 +12,9 @@ interface MarketSnapshotWidgetProps {
 
 // Fixed display order — indices first, then commodities, the way
 // investing.com's own sidebar groups them. Anything the backend hasn't
-// got a reading for yet (no ALPHA_VANTAGE_API_KEY, or mid rate-limit)
-// is just missing from `indicators` and skipped here, never shown as a
-// placeholder.
+// got a reading for yet (e.g. mid a Yahoo Finance hiccup — this data is
+// free/keyless, no config to be missing) is just absent from
+// `indicators` and skipped here, never shown as a placeholder.
 const DISPLAY_ORDER = ["dow", "sp500", "nasdaq", "gold", "silver", "oil", "brent"];
 
 // "+0.42%" / "-1.35%" / "—" (no prior reading yet) -> a signed number,

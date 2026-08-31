@@ -4,7 +4,7 @@ only; `rest_client.py` stays public-market-data-only on purpose (see its
 docstring).
 
 Degrades the same way as the rest of the app's optional integrations
-(Etherscan, Alpha Vantage — see `app/intelligence/whales/providers.py`):
+(Etherscan — see `app/intelligence/whales/providers.py`):
 no API key configured means every method returns an empty list rather
 than raising, so a caller with a `settings.binance_api_key` check can
 skip calling this at all, and a caller without one still fails safe.

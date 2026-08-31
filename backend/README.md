@@ -265,7 +265,7 @@ Explanation — all five categories are real, see below.
 app/intelligence/
   macro/
     symbols.py       registry of every macro indicator + its provider
-    providers.py      Alpha Vantage / Fear&Greed / CoinGecko REST clients
+    providers.py      Yahoo Finance / Fear&Greed / CoinGecko REST clients
     service.py         fetch_and_persist_macro_snapshot() — one poll cycle
   news/
     sources.py         registry of RSS sources
@@ -296,31 +296,32 @@ app/services/
 
 ### Macro Engine
 
-10 indicators, each stored as its own history in `macro_data`
+12 indicators, each stored as its own history in `macro_data`
 (`app/models/macro.py`, append-only — one row per fetch):
 
 | Indicator | Provider | Notes |
 |---|---|---|
-| DXY, Gold, Silver, Oil, S&P 500, NASDAQ, VIX | Alpha Vantage (`TIME_SERIES_DAILY`) | ETF proxies (UUP/GLD/SLV/USO/SPY/QQQ/VIXY) — no free direct index feed exists, see `app/ai_engine/scoring/macro.py`'s docstring for why this is scored by % change, not level |
-| US 10Y Yield | Alpha Vantage (`TREASURY_YIELD`) | A real yield, not a proxy |
+| DXY, Gold, Silver, WTI, Brent, Dow, S&P 500, NASDAQ 100, VIX, US 10Y | Yahoo Finance (`/v8/finance/chart/{symbol}`) | Free, keyless, real instruments (not ETF proxies) — `^DJI`, `^GSPC`, `^NDX`, `^VIX`, `^TNX`, `DX-Y.NYB`, `GC=F`, `SI=F`, `CL=F`, `BZ=F`. Undocumented but widely relied on; requires a browser-like User-Agent header or it 429s outright — see `providers.py::fetch_yahoo_finance_quote` |
 | Crypto Fear & Greed | `alternative.me` | Free, keyless, 0-100 index, updates daily |
 | BTC Dominance | CoinGecko `/global` | Free, keyless |
 
-Set `ALPHA_VANTAGE_API_KEY` in `.env` (free tier: 25 requests/day — get one
-at [alphavantage.co](https://www.alphavantage.co/support/#api-key)) to
-enable the 7 ETF/treasury-proxied indicators; Fear & Greed and BTC
-Dominance work regardless. `MACRO_POLL_INTERVAL_SECONDS` (default 6h) is
-deliberately long to respect that quota.
+All 12 are free and keyless — no API key to set, no daily-quota cliff to
+poll around (this replaced an earlier Alpha-Vantage-backed version of
+this engine that needed `ALPHA_VANTAGE_API_KEY` and only covered 7 of
+these via ETF/treasury proxies). `MACRO_POLL_INTERVAL_SECONDS` (default
+30min) is on the same order as this app's other scheduler intervals as a
+result.
 
-Of the 10, **DXY/NASDAQ/S&P 500/VIX/US 10Y/Gold/Fear & Greed feed real
+Of the 12, **DXY/NASDAQ/S&P 500/VIX/US 10Y/Gold/Fear & Greed feed real
 scoring** — `app/ai_engine/scoring/macro.py::score_macro()` reads the
 latest snapshot (`MarketContext.macro_snapshot`, built by
 `market_context.py`) and now carries real weight (`0.09`) in
 `market_score.py`'s `FACTOR_WEIGHTS`, up from the Sprint 3 stub's `0.00` —
 exactly the extension point that stub's docstring described. Silver, Oil,
-and BTC Dominance are fetched/displayed but not scored (ambiguous or
-too-narrow a signal for crypto risk sentiment — see `symbols.py`'s
-`used_in_scoring` field for the reasoning per indicator).
+Brent, Dow, and BTC Dominance are fetched/displayed but not scored
+(ambiguous, too-narrow a signal for crypto risk sentiment, or redundant
+with an already-scored sibling — see `symbols.py`'s `used_in_scoring`
+field for the reasoning per indicator).
 
 **To add a new macro source**: add one `MacroIndicatorDef` to
 `app/intelligence/macro/symbols.py`, handle its `provider` value in
@@ -331,8 +332,8 @@ returns `float | None` and never raises), and it starts showing up in
 ### News Engine
 
 Aggregates 9 RSS sources (`app/intelligence/news/sources.py`) on
-`NEWS_POLL_INTERVAL_SECONDS` (default 10min, no rate-limit concern like
-Alpha Vantage): CoinDesk, Cointelegraph, Decrypt, The Block, and
+`NEWS_POLL_INTERVAL_SECONDS` (default 10min — RSS tolerates frequent
+polling): CoinDesk, Cointelegraph, Decrypt, The Block, and
 CryptoSlate for crypto; TechCrunch AI and VentureBeat AI for AI;
 TechCrunch and Wired for general innovation. Each article is classified
 once at ingest time by a **deterministic keyword classifier**

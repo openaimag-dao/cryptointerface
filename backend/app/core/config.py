@@ -64,18 +64,17 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
 
     # Sprint 4: Intelligence Layer (app/intelligence/).
-    # Alpha Vantage free tier is tiny (25 requests/day) — see
-    # app/intelligence/macro/providers.py — so the default poll interval
-    # is deliberately long. Leave the key blank to disable the
-    # ETF-proxy/treasury-yield indicators; Fear & Greed and BTC Dominance
-    # stay free/keyless regardless.
-    alpha_vantage_api_key: str = ""
-    macro_poll_interval_seconds: float = 21_600.0  # 6h
+    # All 10 macro indicators are free/keyless (Yahoo Finance's public
+    # chart endpoint + alternative.me + CoinGecko — see
+    # app/intelligence/macro/providers.py), no tiny daily quota to poll
+    # around anymore, so this is on the same order as this app's other
+    # scheduler intervals rather than deliberately stretched out.
+    macro_poll_interval_seconds: float = 1_800.0  # 30min
     sentiment_recompute_interval_seconds: float = 300.0  # 5min
     llm_explanation_interval_seconds: float = 1_800.0  # 30min
     llm_explanation_anchor_symbol: str = "BTCUSDT"
-    # RSS feeds have no rate-limit concern like Alpha Vantage, so this can
-    # poll far more often — see app/intelligence/news/.
+    # RSS feeds tolerate frequent polling, so this can run far more often
+    # than the macro poller — see app/intelligence/news/.
     news_poll_interval_seconds: float = 600.0  # 10min
     # News Portal AI digest (app/intelligence/llm/news_digest.py) — one
     # Claude call per portal topic per cycle, so this stays hourly rather

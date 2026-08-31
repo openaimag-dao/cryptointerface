@@ -1,17 +1,20 @@
 """Registry of every macro indicator the Macro Engine tracks.
 
 To add a new indicator: add one entry here, then handle its `provider`
-value in `providers.py`/`service.py` if it isn't one of the existing three
+value in `providers.py`/`service.py` if it isn't one of the existing
 providers. Nothing else needs to change — `/api/macro/indicators` and the
 scheduler both iterate this registry.
 
-Free-tier reality check: none of DXY/Gold/Silver/Oil/NASDAQ/S&P 500/VIX
-have a direct free index feed, so these are tracked via liquid, highly
-correlated ETF proxies through Alpha Vantage's `TIME_SERIES_DAILY` (a
-single generic endpoint) — e.g. `UUP` for the Dollar Index, `GLD` for
-Gold spot. US 10Y uses Alpha Vantage's dedicated `TREASURY_YIELD`
-endpoint instead (a real yield, not a proxy). Fear & Greed and BTC
-Dominance are free/keyless (`alternative.me`, CoinGecko `/global`).
+Every index/commodity/yield here (DXY, Gold, Silver, WTI, Brent, Dow,
+S&P 500, NASDAQ 100, VIX, US 10Y) comes from Yahoo Finance's public
+`/v8/finance/chart/{symbol}` endpoint — free, keyless, no daily-quota
+cliff the way Alpha Vantage's free tier had (this replaced an earlier
+Alpha-Vantage-backed version of this registry that tracked ETF proxies
+instead of the real instruments, specifically because it needed a key).
+See `providers.py::fetch_yahoo_finance_quote` for the one thing that
+endpoint does require: a browser-like User-Agent, or Yahoo's edge
+rejects the request outright. Fear & Greed and BTC Dominance are a
+separate free/keyless pair (`alternative.me`, CoinGecko `/global`).
 """
 
 from dataclasses import dataclass
@@ -22,90 +25,92 @@ class MacroIndicatorDef:
     id: str
     label: str
     description: str
-    provider: str  # "alpha_vantage_etf" | "alpha_vantage_treasury" | "fear_greed" | "coingecko_global"
-    # Alpha Vantage ETF ticker (only set when provider == "alpha_vantage_etf")
-    av_ticker: str | None = None
+    provider: str  # "yahoo_finance" | "fear_greed" | "coingecko_global"
+    # Yahoo Finance chart symbol (only set when provider == "yahoo_finance")
+    yahoo_symbol: str | None = None
     # Whether score_macro() (app/ai_engine/scoring/macro.py) uses this
-    # indicator. A few (Silver, Oil) are tracked/displayed but have too
-    # weak/ambiguous a direct correlation to crypto risk sentiment to be
-    # worth a scoring sub-weight — see that module's docstring.
+    # indicator. A few (Silver, Oil, Brent, Dow) are tracked/displayed but
+    # have too weak/ambiguous a direct correlation to crypto risk sentiment,
+    # or overlap too heavily with an already-scored sibling, to be worth a
+    # scoring sub-weight — see that module's docstring.
     used_in_scoring: bool = True
 
 
 MACRO_INDICATORS: list[MacroIndicatorDef] = [
     MacroIndicatorDef(
         id="dxy",
-        label="DXY Dollar Index (UUP proxy)",
+        label="DXY Dollar Index",
         description="Weaker dollar historically correlates with crypto strength.",
-        provider="alpha_vantage_etf",
-        av_ticker="UUP",
+        provider="yahoo_finance",
+        yahoo_symbol="DX-Y.NYB",
     ),
     MacroIndicatorDef(
         id="gold",
-        label="Gold Spot (GLD proxy)",
+        label="Gold (COMEX Futures)",
         description="Safe-haven demand alongside BTC's 'digital gold' narrative.",
-        provider="alpha_vantage_etf",
-        av_ticker="GLD",
+        provider="yahoo_finance",
+        yahoo_symbol="GC=F",
     ),
     MacroIndicatorDef(
         id="silver",
-        label="Silver Spot (SLV proxy)",
+        label="Silver (COMEX Futures)",
         description="Industrial + precious-metal demand; tracked for context, not scored.",
-        provider="alpha_vantage_etf",
-        av_ticker="SLV",
+        provider="yahoo_finance",
+        yahoo_symbol="SI=F",
         used_in_scoring=False,
     ),
     MacroIndicatorDef(
         id="oil",
-        label="Crude Oil - WTI (USO proxy)",
+        label="Crude Oil - WTI",
         description="Broad inflation/risk-appetite proxy; tracked for context, not scored.",
-        provider="alpha_vantage_etf",
-        av_ticker="USO",
+        provider="yahoo_finance",
+        yahoo_symbol="CL=F",
         used_in_scoring=False,
     ),
     MacroIndicatorDef(
         id="sp500",
-        label="S&P 500 (SPY proxy)",
+        label="S&P 500",
         description="Risk-on equities strength tends to correlate with crypto strength.",
-        provider="alpha_vantage_etf",
-        av_ticker="SPY",
+        provider="yahoo_finance",
+        yahoo_symbol="^GSPC",
     ),
     MacroIndicatorDef(
         id="nasdaq",
-        label="NASDAQ 100 (QQQ proxy)",
+        label="NASDAQ 100",
         description="Tech-heavy risk appetite, the most crypto-correlated equity index.",
-        provider="alpha_vantage_etf",
-        av_ticker="QQQ",
+        provider="yahoo_finance",
+        yahoo_symbol="^NDX",
     ),
     MacroIndicatorDef(
         id="dow",
-        label="Dow Jones (DIA proxy)",
+        label="Dow Jones Industrial Average",
         description="Broad blue-chip equities strength; tracked for context, not scored "
         "— overlaps heavily with S&P 500's risk-on signal.",
-        provider="alpha_vantage_etf",
-        av_ticker="DIA",
+        provider="yahoo_finance",
+        yahoo_symbol="^DJI",
         used_in_scoring=False,
     ),
     MacroIndicatorDef(
         id="brent",
-        label="Crude Oil - Brent (BNO proxy)",
+        label="Crude Oil - Brent",
         description="The international oil benchmark alongside WTI; tracked for context, not scored.",
-        provider="alpha_vantage_etf",
-        av_ticker="BNO",
+        provider="yahoo_finance",
+        yahoo_symbol="BZ=F",
         used_in_scoring=False,
     ),
     MacroIndicatorDef(
         id="vix",
-        label="VIX Volatility (VIXY proxy)",
+        label="VIX Volatility Index",
         description="Elevated equity fear historically coincides with crypto de-risking.",
-        provider="alpha_vantage_etf",
-        av_ticker="VIXY",
+        provider="yahoo_finance",
+        yahoo_symbol="^VIX",
     ),
     MacroIndicatorDef(
         id="us10y",
         label="US 10Y Yield",
         description="Rising yields raise the opportunity cost of holding non-yielding risk assets.",
-        provider="alpha_vantage_treasury",
+        provider="yahoo_finance",
+        yahoo_symbol="^TNX",
     ),
     MacroIndicatorDef(
         id="fear_greed",

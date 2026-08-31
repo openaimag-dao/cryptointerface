@@ -5,7 +5,7 @@ configured via `BINANCE_API_KEY`/`BINANCE_API_SECRET` (see .env.example).
 This app has no user/auth system, so there is exactly one portfolio: the
 account those credentials belong to — the same "one shared account, not
 multi-tenant" scope every other API-keyed integration in this app uses
-(Etherscan, Alpha Vantage, Anthropic). Degrades to `None` — never raises —
+(Etherscan, Anthropic). Degrades to `None` — never raises —
 when no key is configured or the account API is unreachable, so the caller
 (`app/api/portfolio.py`) can fall back to `mock_data.get_portfolio()`, the
 same fail-open discipline `app/tasks/coingecko_fallback.py` uses when
