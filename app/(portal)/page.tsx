@@ -97,7 +97,7 @@ export default async function PortalHomePage({ searchParams }: PortalHomePagePro
           </div>
 
           {sidebarTrending.length > 0 || marketAssets.length > 0 || macroIndicators.length > 0 ? (
-            <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
+            <aside className="space-y-6">
               {sidebarTrending.length > 0 ? (
                 <HeadlineListWidget
                   title={t.homeTrendingNow}

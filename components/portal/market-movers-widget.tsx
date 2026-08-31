@@ -1,7 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import { TrendingDown, TrendingUp } from "lucide-react";
 
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
+import { useLiveMarketPrices } from "@/hooks/use-live-market-prices";
 import type { MarketAsset } from "@/types";
 
 interface MarketMoversWidgetProps {
@@ -19,8 +22,11 @@ function baseSymbol(symbol: string): string {
 // Same "block in block" sidebar module as HeadlineListWidget, but for the
 // live market — real 24h change from the same /api/market feed the price
 // ticker reads, ranked rather than narrated, the way a crypto portal's
-// market panel actually looks next to its headlines.
-export function MarketMoversWidget({ assets, title, gainersLabel, losersLabel }: MarketMoversWidgetProps) {
+// market panel actually looks next to its headlines. `assets` is the
+// server-rendered snapshot for first paint; useLiveMarketPrices takes it
+// from there and re-ranks on every live poll.
+export function MarketMoversWidget({ assets: initialAssets, title, gainersLabel, losersLabel }: MarketMoversWidgetProps) {
+  const assets = useLiveMarketPrices(initialAssets);
   if (assets.length === 0) return null;
 
   const sorted = [...assets].sort((a, b) => b.changePercent24h - a.changePercent24h);

@@ -84,7 +84,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
         {otherSectionWidgets.some((widgetItems) => widgetItems.length > 0) ||
         marketAssets.length > 0 ||
         macroIndicators.length > 0 ? (
-          <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
+          <aside className="space-y-6">
             {otherTopics.map((otherTopic, index) => (
               <HeadlineListWidget
                 key={otherTopic.slug}
