@@ -88,6 +88,41 @@
   --info: #1d4ed8;
 }
 
+/* Portal dark mode — its own toggle (lib/portal-theme.ts), independent of
+ * the terminal's next-themes state, same reasoning as .portal-theme
+ * itself: a "reading at night" editorial dark, not the terminal's neon
+ * trading-app dark. Combined on the same element as .portal-theme (not a
+ * `.dark` ancestor selector) since the layout already knows the resolved
+ * theme server-side and can just emit both classes together — no flash,
+ * no dependency on the terminal's own dark/light state.
+ */
+.portal-theme.portal-dark {
+  color-scheme: dark;
+
+  --background: #16140f;
+  --foreground: #f2ede3;
+
+  --surface: #1e1b15;
+  --surface-elevated: #24201a;
+  --border-subtle: rgba(242, 237, 227, 0.08);
+  --border-strong: rgba(242, 237, 227, 0.16);
+
+  --muted: #9c9384;
+  --muted-foreground: #b9af9f;
+
+  --accent: #4fd398;
+  --accent-foreground: #0a1f14;
+  --accent-dim: rgba(79, 211, 152, 0.14);
+
+  --danger: #f0655f;
+  --danger-dim: rgba(240, 101, 95, 0.14);
+
+  --warning: #f0bb5b;
+  --warning-dim: rgba(240, 187, 91, 0.14);
+
+  --info: #6ba2ff;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

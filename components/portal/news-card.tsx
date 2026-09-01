@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { timeAgo } from "@/lib/utils";
-import type { PortalLanguage } from "@/lib/portal-i18n";
+import { isBreakingNews, timeAgo } from "@/lib/utils";
+import { portalStrings, type PortalLanguage } from "@/lib/portal-i18n";
 import type { NewsItem } from "@/types";
 import { ArticleImage } from "@/components/portal/article-image";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -18,6 +18,8 @@ interface PortalNewsCardProps {
 }
 
 export function PortalNewsCard({ news, featured, lang = "en" }: PortalNewsCardProps) {
+  const breaking = isBreakingNews(news.publishedAt, news.impactScore);
+
   return (
     <Card className="h-full overflow-hidden transition-colors hover:border-border-strong">
       {news.imageUrl ? (
@@ -28,7 +30,13 @@ export function PortalNewsCard({ news, featured, lang = "en" }: PortalNewsCardPr
         />
       ) : null}
       <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-        <span className="text-xs font-medium text-muted-foreground">
+        <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          {breaking ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-danger px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+              <span className="size-1.5 animate-pulse rounded-full bg-white" />
+              {portalStrings(lang).breakingLabel}
+            </span>
+          ) : null}
           {news.source} · {news.category}
         </span>
         <SentimentBadge sentiment={news.sentiment} />

@@ -6,8 +6,10 @@ import { Rss } from "lucide-react";
 
 import { PORTAL_TOPICS } from "@/lib/portal-topics";
 import { PORTAL_LANGUAGE_COOKIE, portalStrings, resolvePortalLanguage, topicStrings } from "@/lib/portal-i18n";
+import { PORTAL_THEME_COOKIE, resolvePortalTheme } from "@/lib/portal-theme";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/session";
 import { LanguageSwitcher } from "@/components/portal/language-switcher";
+import { PortalThemeToggle } from "@/components/portal/portal-theme-toggle";
 import { PriceTicker } from "@/components/portal/price-ticker";
 
 export default async function PortalLayout({ children }: { children: ReactNode }) {
@@ -15,12 +17,15 @@ export default async function PortalLayout({ children }: { children: ReactNode }
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   const session = token ? await verifySessionToken(token) : null;
   const lang = resolvePortalLanguage(cookieStore.get(PORTAL_LANGUAGE_COOKIE)?.value);
+  const theme = resolvePortalTheme(cookieStore.get(PORTAL_THEME_COOKIE)?.value);
   const t = portalStrings(lang);
   const dateLocale = lang === "en" ? "en-US" : lang === "ru" ? "ru-RU" : "kk-KZ";
   const today = new Date().toLocaleDateString(dateLocale, { weekday: "long", month: "long", day: "numeric" });
 
   return (
-    <div className="portal-theme flex min-h-screen flex-col bg-background text-foreground">
+    <div
+      className={`portal-theme flex min-h-screen flex-col bg-background text-foreground${theme === "dark" ? " portal-dark" : ""}`}
+    >
       <PriceTicker />
       <header className="border-b border-border-strong">
         {/* Utility bar: date + language + account, small and out of the
@@ -28,6 +33,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
         <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-6 py-2 text-xs text-muted-foreground">
           <span>{today}</span>
           <div className="flex items-center gap-4">
+            <PortalThemeToggle current={theme} />
             <LanguageSwitcher current={lang} />
             <Link href="/dashboard" className="transition-colors hover:text-foreground">
               {t.navTerminal}

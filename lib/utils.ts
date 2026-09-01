@@ -58,3 +58,18 @@ export function timeAgo(iso: string, lang: keyof typeof TIME_AGO_UNITS = "en"): 
   const days = Math.floor(hours / 24);
   return `${days}${units.day}`;
 }
+
+const BREAKING_NEWS_MAX_AGE_MINUTES = 120;
+const BREAKING_NEWS_MIN_IMPACT_SCORE = 60;
+
+/**
+ * "Breaking" is a real, deterministic read of data the classifier
+ * already produced at ingest time (app/intelligence/news/classifier.py)
+ * — recent AND independently scored as significant — never a fabricated
+ * or editorial label. Both thresholds are intentionally conservative so
+ * this stays rare enough to mean something.
+ */
+export function isBreakingNews(publishedAt: string, impactScore: number): boolean {
+  const ageMinutes = (Date.now() - new Date(publishedAt).getTime()) / 60000;
+  return ageMinutes >= 0 && ageMinutes <= BREAKING_NEWS_MAX_AGE_MINUTES && impactScore >= BREAKING_NEWS_MIN_IMPACT_SCORE;
+}

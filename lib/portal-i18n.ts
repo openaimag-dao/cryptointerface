@@ -53,6 +53,7 @@ interface PortalStrings {
   topGainers: string;
   topLosers: string;
   marketSnapshot: string;
+  breakingLabel: string;
   shareLabel: string;
   shareCopyLink: string;
   shareCopied: string;
@@ -94,6 +95,7 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
     topGainers: "Top Gainers",
     topLosers: "Top Losers",
     marketSnapshot: "Markets",
+    breakingLabel: "Breaking",
     shareLabel: "Share",
     shareCopyLink: "Copy link",
     shareCopied: "Copied!",
@@ -137,6 +139,7 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
     topGainers: "Растут больше всех",
     topLosers: "Падают больше всех",
     marketSnapshot: "Мировые рынки",
+    breakingLabel: "Молния",
     shareLabel: "Поделиться",
     shareCopyLink: "Скопировать ссылку",
     shareCopied: "Скопировано!",
@@ -177,6 +180,7 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
     topGainers: "Ең көп өскендер",
     topLosers: "Ең көп түскендер",
     marketSnapshot: "Әлемдік нарықтар",
+    breakingLabel: "Жедел",
     shareLabel: "Бөлісу",
     shareCopyLink: "Сілтемені көшіру",
     shareCopied: "Көшірілді!",

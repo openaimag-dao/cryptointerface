@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ExternalLink, Sparkles } from "lucide-react";
 
-import { timeAgo } from "@/lib/utils";
+import { isBreakingNews, timeAgo } from "@/lib/utils";
 import { PORTAL_LANGUAGE_COOKIE, portalStrings, resolvePortalLanguage, topicStrings } from "@/lib/portal-i18n";
 import { portalTopicForValue } from "@/lib/portal-topics";
 import { SITE_URL } from "@/lib/env";
@@ -94,6 +94,12 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          {isBreakingNews(article.publishedAt, article.impactScore) ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-danger px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+              <span className="size-1.5 animate-pulse rounded-full bg-white" />
+              {t.breakingLabel}
+            </span>
+          ) : null}
           <span>{article.source}</span>
           <span>·</span>
           <span>{article.category}</span>
