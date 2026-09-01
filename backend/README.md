@@ -221,6 +221,19 @@ at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)). With no ke
 the endpoint replies with a "not configured" message instead of erroring —
 same fail-open philosophy as the rest of the Data Engine.
 
+This same `GEMINI_API_KEY` also powers translation, digest, AI news
+processing, and the LLM explanation layer (see `app/services/gemini_client.py`)
+— every one of them shares one free-tier quota, which is a real
+**5 requests/minute per model per project** (confirmed live; not
+prominently documented by Google). `gemini_client.py` self-throttles all
+of them to one call roughly every 13s process-wide, and retries a 429
+once or twice honoring the server's own suggested backoff, so this stays
+inside quota without any of the batch sizes/intervals above needing to be
+hand-tuned around it. The practical effect: under a cold-start burst (all
+schedulers' first cycle firing at once) a chat reply or a translation can
+take several seconds longer than the model's own latency while it waits
+its turn — expected, not a bug.
+
 ### Portfolio (Binance Futures account)
 
 `GET /api/portfolio` (`app/services/portfolio_service.py` +
