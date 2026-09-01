@@ -501,6 +501,7 @@ symbol, on every request.
 | `GET /api/news/portal?topic=&limit=&offset=` | Real, DB-paginated listing for the public News Portal (see below) |
 | `GET /api/news/{id}` | Real, single article by id |
 | `GET /api/news/digest?topic=` | Real; reads the scheduler's latest AI-narrated digest for that topic (never calls the AI model inline) |
+| `GET /api/news/tag/{slug}?limit=&offset=` | Real, DB-paginated archive of every PUBLISHED article mentioning one AI-extracted entity (see "Entity tag pages" below); 404 for an unknown slug |
 | `GET /api/whales/transactions?count=&asset=` | Real, most recent tracked transfers (ETH/LINK only) |
 | `GET /api/sentiment?symbol=&interval=` | Real, computes + persists on every call |
 | `GET /api/llm/explanation/{symbol}?interval=` | Real, computes + persists live |
@@ -595,6 +596,16 @@ forbids inventing anything not present in the input.
   hundreds of articles resolves to one row, linked via `ArticleEntity`.
   Real entity-based dedup matching (vs. the title-only matching in
   "News Platform: deduplication" above) is future work.
+- **Tag archive pages**: every `NewsItem` the API returns carries its
+  article's `entities` (name/slug/entityType), rendered as clickable
+  badges on the frontend (`components/portal/news-card.tsx`) linking to
+  `/tag/{slug}` — a dedicated per-entity archive page
+  (`GET /api/news/tag/{slug}`, `app/services/entity_repository.py::
+  get_articles_for_entity`), PUBLISHED-only, newest first, real DB-level
+  pagination. Covers coins (CRYPTOCURRENCY) the same way it covers
+  companies/people/protocols — one general mechanism, not a
+  crypto-ticker-specific one. Empty until AI News Processing reaches an
+  article, same backlog-drains-gradually caveat as `aiSummary` below.
 - **Importance scoring**: `app/intelligence/news/dedup.py::
   compute_importance_score` — a deterministic 0-10 combination of the
   classifier's `impact_score` and independent-source count (capped at 5

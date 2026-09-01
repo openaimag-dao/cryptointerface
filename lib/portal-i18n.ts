@@ -59,6 +59,20 @@ interface PortalStrings {
   shareCopied: string;
   rssFeed: string;
   footerTagline: string;
+  navSaved: string;
+  savedTitle: string;
+  savedDescription: string;
+  savedEmpty: string;
+  savedRemove: string;
+  tagArticles: (name: string) => string;
+  tagEmpty: (name: string) => string;
+  fearGreedTitle: string;
+  fearGreedExtremeFear: string;
+  fearGreedFear: string;
+  fearGreedNeutral: string;
+  fearGreedGreed: string;
+  fearGreedExtremeGreed: string;
+  heatmapTitle: string;
 }
 
 const STRINGS: Record<PortalLanguage, PortalStrings> = {
@@ -102,6 +116,20 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
     rssFeed: "RSS Feed",
     footerTagline:
       "Crypto, AI, Blockchain & Innovation headlines — aggregated from real sources and classified automatically. Every story links back to its original publisher.",
+    navSaved: "Saved",
+    savedTitle: "Saved Articles",
+    savedDescription: "Articles you've bookmarked from AIMAG News",
+    savedEmpty: "Nothing saved yet — bookmark an article to see it here.",
+    savedRemove: "Remove",
+    tagArticles: (name) => `Articles tagged “${name}”`,
+    tagEmpty: (name) => `No articles tagged “${name}” yet. Check back soon.`,
+    fearGreedTitle: "Fear & Greed",
+    fearGreedExtremeFear: "Extreme Fear",
+    fearGreedFear: "Fear",
+    fearGreedNeutral: "Neutral",
+    fearGreedGreed: "Greed",
+    fearGreedExtremeGreed: "Extreme Greed",
+    heatmapTitle: "Market Heatmap",
   },
   ru: {
     tagline: "Крипто · ИИ · Блокчейн · Инновации",
@@ -146,6 +174,20 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
     rssFeed: "RSS-лента",
     footerTagline:
       "Новости о крипте, ИИ, блокчейне и инновациях — собраны из реальных источников и классифицированы автоматически. Каждая новость ведёт к оригинальному источнику.",
+    navSaved: "Сохранённое",
+    savedTitle: "Сохранённые статьи",
+    savedDescription: "Статьи, которые вы сохранили из AIMAG News",
+    savedEmpty: "Пока ничего не сохранено — добавьте статью в закладки, и она появится здесь.",
+    savedRemove: "Удалить",
+    tagArticles: (name) => `Статьи по теме «${name}»`,
+    tagEmpty: (name) => `Пока нет статей по теме «${name}». Загляните позже.`,
+    fearGreedTitle: "Индекс страха и жадности",
+    fearGreedExtremeFear: "Крайний страх",
+    fearGreedFear: "Страх",
+    fearGreedNeutral: "Нейтрально",
+    fearGreedGreed: "Жадность",
+    fearGreedExtremeGreed: "Крайняя жадность",
+    heatmapTitle: "Тепловая карта рынка",
   },
   kk: {
     tagline: "Крипто · ЖИ · Блокчейн · Инновация",
@@ -187,6 +229,20 @@ const STRINGS: Record<PortalLanguage, PortalStrings> = {
     rssFeed: "RSS-таспа",
     footerTagline:
       "Крипто, ЖИ, блокчейн және инновациялар туралы жаңалықтар — нақты дереккөздерден жиналып, автоматты түрде жіктелген. Әр жаңалық түпнұсқа дереккөзге сілтеме береді.",
+    navSaved: "Сақталған",
+    savedTitle: "Сақталған мақалалар",
+    savedDescription: "AIMAG News-тен сақтаған мақалаларыңыз",
+    savedEmpty: "Әзірге ештеңе сақталмады — мақаланы бетбелгіге қосыңыз, ол осында пайда болады.",
+    savedRemove: "Жою",
+    tagArticles: (name) => `«${name}» тақырыбындағы мақалалар`,
+    tagEmpty: (name) => `«${name}» тақырыбында әзірге мақалалар жоқ. Кейінірек қараңыз.`,
+    fearGreedTitle: "Қорқыныш пен ашкөздік индексі",
+    fearGreedExtremeFear: "Аса қорқыныш",
+    fearGreedFear: "Қорқыныш",
+    fearGreedNeutral: "Бейтарап",
+    fearGreedGreed: "Ашкөздік",
+    fearGreedExtremeGreed: "Аса ашкөздік",
+    heatmapTitle: "Нарық жылу картасы",
   },
 };
 

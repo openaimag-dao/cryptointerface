@@ -9,10 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db
 from app.models.article_translation import SUPPORTED_TRANSLATION_LANGUAGES, ArticleTranslation
+from app.models.entity import Entity
 from app.models.news import NewsArticle
-from app.schemas.news import NewsEventOut, NewsItem, PortalNewsPage
+from app.schemas.news import EntityNewsPage, EntityOut, NewsEventOut, NewsItem, PortalNewsPage
 from app.schemas.news_digest import NewsDigestOut
 from app.services.article_translation_repository import get_translations_for_articles
+from app.services.entity_repository import get_articles_for_entity, get_entities_for_articles, get_entity_by_slug
 from app.services.news_digest_repository import get_latest_news_digest
 from app.services.news_event_repository import get_event_articles, get_event_by_id
 from app.services.news_repository import (
@@ -43,12 +45,22 @@ async def _translations_for(db: AsyncSession, articles: list[NewsArticle], lang:
     return await get_translations_for_articles(db, [a.id for a in articles], lang)
 
 
-def to_news_item(article: NewsArticle, translation: ArticleTranslation | None = None) -> NewsItem:
+async def _entities_for(db: AsyncSession, articles: list[NewsArticle]) -> dict[int, list[Entity]]:
+    return await get_entities_for_articles(db, [a.id for a in articles])
+
+
+def to_news_item(
+    article: NewsArticle,
+    translation: ArticleTranslation | None = None,
+    entities: list[Entity] | None = None,
+) -> NewsItem:
     """`translation`, when given, is an AI-translated title/summary for
     this exact article (app/intelligence/llm/news_translation.py) — real
     translated text, swapped in for the originals. Absent (translation
     pipeline hasn't reached this article yet, or no language requested)
-    falls back to the original English, never a placeholder."""
+    falls back to the original English, never a placeholder. `entities`
+    is this article's AI-extracted tags (app/intelligence/llm/
+    news_processing.py) — absent/empty until that pipeline reaches it."""
     return NewsItem(
         id=str(article.id),
         source=article.source,
@@ -64,6 +76,7 @@ def to_news_item(article: NewsArticle, translation: ArticleTranslation | None = 
         portal_topic=article.portal_topic,
         ai_summary=article.ai_summary,
         image_url=article.image_url,
+        entities=[EntityOut(name=e.name, slug=e.slug, entity_type=e.entity_type) for e in (entities or [])],
     )
 
 
@@ -77,13 +90,15 @@ async def list_news(
 ) -> list[NewsItem]:
     symbol = symbol.upper() if symbol else None
     articles = await get_latest_news(db, limit=limit, symbol=symbol, category=category, topic=topic)
-    return [to_news_item(a) for a in articles]
+    entities = await _entities_for(db, articles)
+    return [to_news_item(a, entities=entities.get(a.id)) for a in articles]
 
 
 @router.get("/latest", response_model=list[NewsItem])
 async def latest_news(limit: int = Query(10, ge=1, le=50), db: AsyncSession = Depends(get_db)) -> list[NewsItem]:
     articles = await get_latest_news(db, limit=limit)
-    return [to_news_item(a) for a in articles]
+    entities = await _entities_for(db, articles)
+    return [to_news_item(a, entities=entities.get(a.id)) for a in articles]
 
 
 @router.get("/search", response_model=PortalNewsPage)
@@ -103,8 +118,12 @@ async def search(
     articles, total = await search_news(db, q, topic=topic, limit=limit, offset=offset)
     lang = _resolve_lang(lang)
     translations = await _translations_for(db, articles, lang)
+    entities = await _entities_for(db, articles)
     return PortalNewsPage(
-        items=[to_news_item(a, translations.get(a.id)) for a in articles], total=total, limit=limit, offset=offset
+        items=[to_news_item(a, translations.get(a.id), entities.get(a.id)) for a in articles],
+        total=total,
+        limit=limit,
+        offset=offset,
     )
 
 
@@ -124,7 +143,8 @@ async def trending_news(
     articles = await get_trending_news(db, topic=topic, limit=limit)
     lang = _resolve_lang(lang)
     translations = await _translations_for(db, articles, lang)
-    return [to_news_item(a, translations.get(a.id)) for a in articles]
+    entities = await _entities_for(db, articles)
+    return [to_news_item(a, translations.get(a.id), entities.get(a.id)) for a in articles]
 
 
 @router.get("/portal", response_model=PortalNewsPage)
@@ -142,8 +162,12 @@ async def portal_news(
     articles, total = await get_portal_news_page(db, topic=topic, limit=limit, offset=offset)
     lang = _resolve_lang(lang)
     translations = await _translations_for(db, articles, lang)
+    entities = await _entities_for(db, articles)
     return PortalNewsPage(
-        items=[to_news_item(a, translations.get(a.id)) for a in articles], total=total, limit=limit, offset=offset
+        items=[to_news_item(a, translations.get(a.id), entities.get(a.id)) for a in articles],
+        total=total,
+        limit=limit,
+        offset=offset,
     )
 
 
@@ -179,12 +203,40 @@ async def get_news_event(event_id: int, db: AsyncSession = Depends(get_db)) -> N
     if event is None:
         raise HTTPException(status_code=404, detail=f"No event with id {event_id}")
     articles = await get_event_articles(db, event_id)
+    entities = await _entities_for(db, articles)
     return NewsEventOut(
         id=str(event.id),
         title=event.title,
         portal_topic=event.portal_topic,
         importance_score=round(event.importance_score, 1),
-        articles=[to_news_item(a) for a in articles],
+        articles=[to_news_item(a, entities=entities.get(a.id)) for a in articles],
+    )
+
+
+@router.get("/tag/{slug}", response_model=EntityNewsPage)
+async def tag_news(
+    slug: str,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    lang: str | None = Query(default=None, description=LANG_DESCRIPTION),
+    db: AsyncSession = Depends(get_db),
+) -> EntityNewsPage:
+    """Archive page for one AI-extracted entity (app/models/entity.py) —
+    every PUBLISHED article that mentions it, newest first. 404 for an
+    unknown slug, same as an unknown article id below."""
+    entity = await get_entity_by_slug(db, slug)
+    if entity is None:
+        raise HTTPException(status_code=404, detail=f"No tag: {slug}")
+    articles, total = await get_articles_for_entity(db, entity.id, limit=limit, offset=offset)
+    lang = _resolve_lang(lang)
+    translations = await _translations_for(db, articles, lang)
+    entities = await _entities_for(db, articles)
+    return EntityNewsPage(
+        entity=EntityOut(name=entity.name, slug=entity.slug, entity_type=entity.entity_type),
+        items=[to_news_item(a, translations.get(a.id), entities.get(a.id)) for a in articles],
+        total=total,
+        limit=limit,
+        offset=offset,
     )
 
 
@@ -199,4 +251,5 @@ async def get_article(
         raise HTTPException(status_code=404, detail=f"No article with id {article_id}")
     lang = _resolve_lang(lang)
     translations = await _translations_for(db, [article], lang)
-    return to_news_item(article, translations.get(article.id))
+    entities = await _entities_for(db, [article])
+    return to_news_item(article, translations.get(article.id), entities.get(article.id))

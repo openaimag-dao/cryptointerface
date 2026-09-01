@@ -16,7 +16,9 @@ from httpx import ASGITransport, AsyncClient
 from app.api.news import router as news_router
 from app.database.session import get_db
 from app.intelligence.llm.news_digest import NewsDigestResult
+from app.intelligence.llm.news_processing import ExtractedEntity
 from app.services.article_translation_repository import upsert_translation
+from app.services.entity_repository import link_article_entities
 from app.services.news_digest_repository import insert_news_digest
 from app.services.news_event_repository import assign_to_event
 from app.services.news_repository import get_article_by_url, insert_article
@@ -300,3 +302,52 @@ async def test_digest_endpoint_returns_the_latest_stored_digest(db_session):
     assert body["highlights"] == ["A", "B"]
     assert body["articleCount"] == 3
     assert body["generatedAt"]
+
+
+@pytest.mark.asyncio
+async def test_portal_item_includes_ai_extracted_entities(db_session):
+    await _insert(db_session, url="https://example.com/entity-article", title="OpenAI launches new model")
+    article = await get_article_by_url(db_session, "https://example.com/entity-article")
+    await link_article_entities(db_session, article.id, [ExtractedEntity(name="OpenAI", entity_type="COMPANY")])
+
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/portal")
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["entities"] == [{"name": "OpenAI", "slug": "openai", "entityType": "COMPANY"}]
+
+
+@pytest.mark.asyncio
+async def test_portal_item_entities_empty_when_none_extracted_yet(db_session):
+    await _insert(db_session, url="https://example.com/no-entities")
+
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/portal")
+
+    assert response.json()["items"][0]["entities"] == []
+
+
+@pytest.mark.asyncio
+async def test_tag_endpoint_returns_articles_for_the_entity(db_session):
+    await _insert(db_session, url="https://example.com/tag-a", title="Bitcoin rallies")
+    await _insert(db_session, url="https://example.com/tag-b", title="Unrelated story")
+    tagged = await get_article_by_url(db_session, "https://example.com/tag-a")
+    await link_article_entities(db_session, tagged.id, [ExtractedEntity(name="Bitcoin", entity_type="CRYPTOCURRENCY")])
+
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/tag/bitcoin")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["entity"] == {"name": "Bitcoin", "slug": "bitcoin", "entityType": "CRYPTOCURRENCY"}
+    assert body["total"] == 1
+    assert body["items"][0]["title"] == "Bitcoin rallies"
+
+
+@pytest.mark.asyncio
+async def test_tag_endpoint_404_for_unknown_slug(db_session):
+    async with await _client(db_session) as client:
+        response = await client.get("/api/news/tag/does-not-exist")
+
+    assert response.status_code == 404
