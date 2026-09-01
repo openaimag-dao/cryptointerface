@@ -56,7 +56,11 @@ class Settings(BaseSettings):
     # a real free tier (Google AI Studio, no card required) — the others
     # don't, and this app's actual call volume fits comfortably inside it.
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
+    # gemini-2.0-flash was retired (confirmed live: the API now 404s on it
+    # with "no longer available... use models/gemini-3.6-flash"). Verified
+    # 3.6-flash live too, both plain generation and the structured-output
+    # (responseSchema) mode every call site here actually depends on.
+    gemini_model: str = "gemini-3.6-flash"
 
     # Real user accounts (app/services/auth_service.py) — register/login for
     # the private dashboard, separate from the public News Portal. Blank

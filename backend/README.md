@@ -212,7 +212,7 @@ deterministic. Each request:
 2. Sends that snapshot as system-prompt context, plus the conversation's
    prior turns (`history` in the request body — sessions live client-side
    only, see `store/chat-store.ts`, so the backend stays stateless), to
-   `GEMINI_MODEL` (default `gemini-2.0-flash`).
+   `GEMINI_MODEL` (default `gemini-3.6-flash`).
 3. Returns the reply as-is. The system prompt explicitly tells the model not
    to suggest placing any specific order.
 
