@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 import pytest
 
 from app.intelligence.llm.news_processing import ExtractedEntity
+from app.models.entity import Entity
 from app.services.entity_repository import (
     get_articles_for_entity,
     get_entities_for_article,
@@ -54,6 +55,47 @@ async def test_get_or_create_entity_is_idempotent_by_slug(db_session):
     second = await get_or_create_entity(db_session, "bitcoin", "CRYPTOCURRENCY")
 
     assert first.id == second.id
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_entity_capitalizes_a_lowercase_llm_extraction(db_session):
+    entity = await get_or_create_entity(db_session, "bitcoin", "CRYPTOCURRENCY")
+
+    assert entity.name == "Bitcoin"
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_entity_preserves_internal_casing(db_session):
+    entity = await get_or_create_entity(db_session, "OpenAI", "COMPANY")
+
+    assert entity.name == "OpenAI"
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_entity_heals_an_existing_rows_casing(db_session):
+    # Simulates data created before this normalization existed (or by a
+    # slug collision that lost the casing race) — bypasses the repository
+    # function entirely so the row starts out genuinely lowercase.
+    stale = Entity(name="bitcoin", slug="bitcoin", entity_type="CRYPTOCURRENCY")
+    db_session.add(stale)
+    await db_session.commit()
+
+    healed = await get_or_create_entity(db_session, "Bitcoin", "CRYPTOCURRENCY")
+
+    assert healed.id == stale.id
+    assert healed.name == "Bitcoin"
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_entity_does_not_overwrite_entity_type_on_conflict(db_session):
+    first = await get_or_create_entity(db_session, "Bitcoin", "CRYPTOCURRENCY")
+
+    # A later, wrong classification of the same slug must never clobber
+    # the entity_type an earlier, correct extraction already set.
+    second = await get_or_create_entity(db_session, "Bitcoin", "COMPANY")
+
+    assert second.id == first.id
+    assert second.entity_type == "CRYPTOCURRENCY"
 
 
 @pytest.mark.asyncio
