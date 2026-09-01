@@ -10,7 +10,7 @@ SUPPORTED_TRANSLATION_LANGUAGES = ("ru", "kk")
 
 
 class ArticleTranslation(Base, IdMixin, CreatedAtMixin):
-    """A Claude-translated title + summary for one article, one target
+    """An AI-translated title + summary for one article, one target
     language. Deliberately a separate table keyed on `article_id`, not
     extra `title_ru`/`title_kk` columns on `NewsArticle` and not a
     duplicated `NewsArticle` row per language — the original spec calls
@@ -18,8 +18,8 @@ class ArticleTranslation(Base, IdMixin, CreatedAtMixin):
     articles per language"). Adding a third language later is a data
     migration, not a schema change.
 
-    Same anti-fabrication discipline as news_processing.py (Q4): Claude
-    is given only the real ingested title/summary and instructed to
+    Same anti-fabrication discipline as news_processing.py (Q4): the
+    model is given only the real ingested title/summary and instructed to
     translate faithfully, never add or omit information.
     """
 

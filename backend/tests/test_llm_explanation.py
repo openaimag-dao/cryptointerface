@@ -12,64 +12,12 @@ from app.services.binance.rest_client import KlineData
 from app.services.market_repository import upsert_candle
 
 
-class _FakeToolUseBlock:
-    def __init__(self, input_data: dict) -> None:
-        self.type = "tool_use"
-        self.input = input_data
+def _fake_generate_structured(calls: list[dict], reply: dict | None):
+    async def _generate_structured(**kwargs) -> dict | None:
+        calls.append(kwargs)
+        return reply
 
-
-class _FakeTextBlock:
-    def __init__(self, text: str) -> None:
-        self.type = "text"
-        self.text = text
-
-
-class _FakeResponse:
-    def __init__(self, content: list) -> None:
-        self.content = content
-
-
-class _FakeMessages:
-    def __init__(self, calls: list[dict], response: _FakeResponse) -> None:
-        self._calls = calls
-        self._response = response
-
-    async def create(self, **kwargs) -> _FakeResponse:
-        self._calls.append(kwargs)
-        return self._response
-
-
-class _FakeAsyncAnthropic:
-    calls: list[dict] = []
-    response: _FakeResponse | None = None
-
-    def __init__(self, api_key: str) -> None:
-        self.messages = _FakeMessages(_FakeAsyncAnthropic.calls, _FakeAsyncAnthropic.response)
-
-    async def close(self) -> None:
-        pass
-
-
-class _RaisingMessages:
-    async def create(self, **kwargs):
-        import anthropic
-        import httpx
-
-        raise anthropic.APIConnectionError(request=httpx.Request("POST", "https://api.anthropic.com/v1/messages"))
-
-
-class _RaisingAsyncAnthropic:
-    def __init__(self, api_key: str) -> None:
-        self.messages = _RaisingMessages()
-
-    async def close(self) -> None:
-        pass
-
-
-@pytest.fixture(autouse=True)
-def _reset_fake_calls():
-    _FakeAsyncAnthropic.calls = []
-    yield
+    return _generate_structured
 
 
 async def _insert_candles(db_session, symbol: str, n: int = 260) -> None:
@@ -99,7 +47,7 @@ async def test_build_llm_explanation_returns_none_without_candle_history(db_sess
 @pytest.mark.asyncio
 async def test_build_llm_explanation_without_api_key_falls_back(monkeypatch, db_session):
     settings = get_settings()
-    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    monkeypatch.setattr(settings, "gemini_api_key", "")
     await _insert_candles(db_session, "TESTUSDT")
 
     result = await build_llm_explanation(db_session, "TESTUSDT", "1h")
@@ -111,25 +59,20 @@ async def test_build_llm_explanation_without_api_key_falls_back(monkeypatch, db_
 
 
 @pytest.mark.asyncio
-async def test_build_llm_explanation_uses_forced_tool_choice_and_preserves_direction_confidence(
+async def test_build_llm_explanation_uses_structured_output_and_preserves_direction_confidence(
     monkeypatch, db_session
 ):
     settings = get_settings()
-    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    monkeypatch.setattr(explanation_module.anthropic, "AsyncAnthropic", _FakeAsyncAnthropic)
-    _FakeAsyncAnthropic.response = _FakeResponse(
-        [
-            _FakeToolUseBlock(
-                {
-                    "summary": "Test summary grounded in the given facts.",
-                    "key_drivers": ["driver one"],
-                    "risks": ["risk one"],
-                    "opportunities": ["opportunity one"],
-                    "assets_affected": ["TESTUSDT"],
-                }
-            )
-        ]
-    )
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    calls: list[dict] = []
+    reply = {
+        "summary": "Test summary grounded in the given facts.",
+        "key_drivers": ["driver one"],
+        "risks": ["risk one"],
+        "opportunities": ["opportunity one"],
+        "assets_affected": ["TESTUSDT"],
+    }
+    monkeypatch.setattr(explanation_module, "generate_structured", _fake_generate_structured(calls, reply))
     await _insert_candles(db_session, "TESTUSDT")
 
     result = await build_llm_explanation(db_session, "TESTUSDT", "1h")
@@ -141,17 +84,14 @@ async def test_build_llm_explanation_uses_forced_tool_choice_and_preserves_direc
     assert result.opportunities == ["opportunity one"]
     assert result.assets_affected == ["TESTUSDT"]
 
-    assert len(_FakeAsyncAnthropic.calls) == 1
-    call = _FakeAsyncAnthropic.calls[0]
-    assert call["tool_choice"] == {"type": "tool", "name": "emit_explanation"}
-    assert call["tools"][0]["name"] == "emit_explanation"
+    assert len(calls) == 1
 
 
 @pytest.mark.asyncio
 async def test_build_llm_explanation_handles_upstream_error_gracefully(monkeypatch, db_session):
     settings = get_settings()
-    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    monkeypatch.setattr(explanation_module.anthropic, "AsyncAnthropic", _RaisingAsyncAnthropic)
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(explanation_module, "generate_structured", _fake_generate_structured([], None))
     await _insert_candles(db_session, "TESTUSDT")
 
     result = await build_llm_explanation(db_session, "TESTUSDT", "1h")

@@ -2,7 +2,7 @@
 
 Computes live for whatever symbol is requested (unlike the Dashboard
 Intelligence Card, which reads the scheduler's cached anchor-symbol
-report to avoid a Claude call on every dashboard poll — see
+report to avoid an AI model call on every dashboard poll — see
 app/intelligence/scheduler/tasks.py).
 """
 

@@ -13,7 +13,7 @@ class ChatHistoryItem(CamelModel):
 class ChatMessageRequest(CamelModel):
     content: str
     session_id: str | None = None
-    # Prior turns of the active session, oldest first, so Claude has
+    # Prior turns of the active session, oldest first, so the model has
     # conversation context. Sessions live client-side only (see
     # store/chat-store.ts) — the backend stays stateless between requests.
     history: list[ChatHistoryItem] = []

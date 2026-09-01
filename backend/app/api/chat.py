@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter
 
 from app.schemas.chat import ChatMessageRequest, ChatMessageResponse
-from app.services.claude_chat import ChatTurn, send_chat_message
+from app.services.ai_chat import ChatTurn, send_chat_message
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 

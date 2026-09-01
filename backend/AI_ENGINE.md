@@ -247,6 +247,6 @@ module.
   `market_score.py`.
 - **LLM Explanation Layer** (`app/intelligence/llm/`) — done: takes an
   already-computed `AIDecision` + Sentiment breakdown and turns it into
-  narrative prose via forced Claude tool-use (`/api/llm/explanation/{symbol}`).
+  narrative prose via Gemini's structured output (`/api/llm/explanation/{symbol}`).
   `direction`/`confidence` are copied from the engine, never set by the
   model — it reads this engine's output, never feeds back into it.

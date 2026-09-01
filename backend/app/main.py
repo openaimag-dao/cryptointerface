@@ -114,7 +114,7 @@ app = FastAPI(
     "Engine (REST + WebSocket ingestion, indicators, Postgres/Redis storage) feeding a "
     "deterministic AI Decision Engine (no LLM, no trade execution — see AI_ENGINE.md), a Sprint 4 "
     "Intelligence Layer (macro/news/whales/sentiment/LLM-explanation, see app/intelligence/), a "
-    "Claude-backed AI Chat assistant, and a Sprint 5 Backtesting Engine that replays the "
+    "Gemini-backed AI Chat assistant, and a Sprint 5 Backtesting Engine that replays the "
     "unmodified Decision Engine bar by bar with no look-ahead (see app/backtesting/). "
     "Portfolio reads a single service Binance Futures account's real balance/positions/trade "
     "history when BINANCE_API_KEY/SECRET are configured, falling back to mock data otherwise "
@@ -147,9 +147,9 @@ app.include_router(ai.router)
 
 # Real: signals.router batches the AI Decision Engine across the watchlist;
 # liquidations.router is fed by Binance's forceOrder WS stream; chat.router
-# answers with Anthropic Claude grounded in a live watchlist snapshot (the
+# answers with Gemini grounded in a live watchlist snapshot (the
 # Decision Engine itself stays deterministic/no-LLM — see
-# app/services/claude_chat.py).
+# app/services/ai_chat.py).
 app.include_router(signals.router)
 app.include_router(liquidations.router)
 app.include_router(chat.router)

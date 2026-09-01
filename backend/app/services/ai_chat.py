@@ -1,27 +1,22 @@
-"""AI Chat backend — Anthropic Claude answers questions about the live
-terminal state.
+"""AI Chat backend — answers questions about the live terminal state.
 
 This is intentionally separate from `app/ai_engine/`: the Decision Engine
 that drives Market Score / Confidence / Direction / Risk stays
-deterministic and never calls an LLM. Claude here only narrates a snapshot
-that engine already computed — it never generates its own score, and it
-never places or suggests placing an order.
+deterministic and never calls an LLM. The chat model here only narrates a
+snapshot that engine already computed — it never generates its own score,
+and it never places or suggests placing an order.
 """
 
 from dataclasses import dataclass
 
-import anthropic
-
 from app.ai_engine.decision_engine import analyze_market
 from app.ai_engine.market_context import build_market_context
 from app.core.config import get_settings
-from app.core.logging import get_logger
 from app.database.session import AsyncSessionLocal
+from app.services.gemini_client import generate_text
 
-logger = get_logger(__name__)
-
-NOT_CONFIGURED_MESSAGE = "AI Chat isn't configured yet — set ANTHROPIC_API_KEY in backend/.env and restart the backend."
-UPSTREAM_ERROR_MESSAGE = "I couldn't reach Claude just now. Please try again in a moment."
+NOT_CONFIGURED_MESSAGE = "AI Chat isn't configured yet — set GEMINI_API_KEY in backend/.env and restart the backend."
+UPSTREAM_ERROR_MESSAGE = "I couldn't reach the AI assistant just now. Please try again in a moment."
 
 SYSTEM_PROMPT = (
     "You are the AIMAG AI Terminal assistant, embedded in a crypto trading dashboard. "
@@ -43,9 +38,10 @@ class ChatTurn:
 
 async def build_watchlist_snapshot(interval: str = _DEFAULT_INTERVAL) -> str:
     """One line per watchlist symbol with the latest AI Decision Engine
-    read, for use as Claude's system-prompt context. Symbols with no
-    candle history yet (fresh backfill, Binance unreachable) are skipped
-    rather than shown as an error — same tolerance as `/api/signals`."""
+    read, for use as the chat model's system-prompt context. Symbols with
+    no candle history yet (fresh backfill, Binance unreachable) are
+    skipped rather than shown as an error — same tolerance as
+    `/api/signals`."""
     settings = get_settings()
     lines: list[str] = []
 
@@ -67,7 +63,7 @@ async def build_watchlist_snapshot(interval: str = _DEFAULT_INTERVAL) -> str:
 
 async def send_chat_message(content: str, history: list[ChatTurn]) -> str:
     settings = get_settings()
-    if not settings.anthropic_api_key:
+    if not settings.gemini_api_key:
         return NOT_CONFIGURED_MESSAGE
 
     snapshot = await build_watchlist_snapshot()
@@ -76,19 +72,5 @@ async def send_chat_message(content: str, history: list[ChatTurn]) -> str:
     messages = [{"role": turn.role, "content": turn.content} for turn in history]
     messages.append({"role": "user", "content": content})
 
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-    try:
-        response = await client.messages.create(
-            model=settings.anthropic_chat_model,
-            max_tokens=1024,
-            system=system_prompt,
-            messages=messages,
-        )
-    except anthropic.APIError:
-        logger.warning("claude_chat_upstream_error", exc_info=True)
-        return UPSTREAM_ERROR_MESSAGE
-    finally:
-        await client.close()
-
-    text_blocks = [block.text for block in response.content if block.type == "text"]
-    return "".join(text_blocks) if text_blocks else UPSTREAM_ERROR_MESSAGE
+    reply = await generate_text(system_prompt=system_prompt, messages=messages, max_output_tokens=1024)
+    return reply if reply else UPSTREAM_ERROR_MESSAGE

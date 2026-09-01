@@ -48,11 +48,15 @@ class Settings(BaseSettings):
     ws_reconnect_max_delay_seconds: float = 60.0
     ws_heartbeat_interval_seconds: float = 30.0
 
-    # AI Chat — Anthropic Claude, used only by the chat assistant. The AI
-    # Decision Engine itself (app/ai_engine/) stays deterministic/no-LLM;
-    # this key never touches signal/score/direction generation.
-    anthropic_api_key: str = ""
-    anthropic_chat_model: str = "claude-sonnet-5"
+    # Every AI-powered feature (chat, translation, digest, processing,
+    # explanation — see app/services/gemini_client.py) shares this one
+    # Gemini key. The AI Decision Engine itself (app/ai_engine/) stays
+    # deterministic/no-LLM; this key never touches signal/score/direction
+    # generation. Gemini over Anthropic/OpenAI specifically because it has
+    # a real free tier (Google AI Studio, no card required) — the others
+    # don't, and this app's actual call volume fits comfortably inside it.
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
 
     # Real user accounts (app/services/auth_service.py) — register/login for
     # the private dashboard, separate from the public News Portal. Blank
@@ -77,17 +81,17 @@ class Settings(BaseSettings):
     # than the macro poller — see app/intelligence/news/.
     news_poll_interval_seconds: float = 600.0  # 10min
     # News Portal AI digest (app/intelligence/llm/news_digest.py) — one
-    # Claude call per portal topic per cycle, so this stays hourly rather
+    # AI call per portal topic per cycle, so this stays hourly rather
     # than matching news_poll_interval_seconds.
     news_digest_interval_seconds: float = 3_600.0  # 1h
     # AI News Processing (app/intelligence/llm/news_processing.py) — one
-    # Claude call per unprocessed article per batch, so this runs often
+    # AI call per unprocessed article per batch, so this runs often
     # enough to keep the backlog small without hammering the API.
     ai_processing_interval_seconds: float = 900.0  # 15min
     ai_processing_batch_size: int = 20
 
     # News Translation (app/intelligence/llm/news_translation.py) — one
-    # Claude call per untranslated article per language per batch, so this
+    # AI call per untranslated article per language per batch, so this
     # runs on its own slower cadence rather than matching
     # ai_processing_interval_seconds (translating is a lower-priority
     # enrichment than the original summary/entities).

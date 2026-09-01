@@ -14,7 +14,7 @@ and explains, it never places an order.
 a "signal"). `/api/liquidations` is fed by Binance's `forceOrder` WebSocket
 stream in real time and persisted to Postgres; `/api/liquidations/heatmap`
 buckets recent liquidations by price for one symbol (`?symbol=`, defaults to
-`BTCUSDT`). `/api/chat/messages` is a real Anthropic Claude assistant
+`BTCUSDT`). `/api/chat/messages` is a real Gemini assistant
 grounded in a live watchlist snapshot (see "AI Chat" below) — the AI
 Decision Engine itself stays deterministic/no-LLM. Sprint 4 adds an
 **Intelligence Layer** (`app/intelligence/`) — real Macro data feeding
@@ -78,7 +78,7 @@ cd backend
 source .venv/bin/activate
 pytest                # 132 tests: indicators, Binance/CoinGecko REST clients, WS client, live feed,
                        # historical loader, WS manager, the AI Decision Engine (trend/momentum/
-                       # .../confidence/risk/decision), the Claude chat service, and the Sprint 4
+                       # .../confidence/risk/decision), the AI chat service, and the Sprint 4
                        # Intelligence Layer (macro + news scoring/providers/classifier, sentiment
                        # engine, LLM explanation)
 ruff check .           # lint
@@ -197,9 +197,9 @@ default 7 symbols; add an entry there for any new coin you want this
 fallback to cover (an unmapped symbol just gets no fallback data, which is
 safe).
 
-### AI Chat (Anthropic Claude)
+### AI Chat (Gemini)
 
-`POST /api/chat/messages` (`app/services/claude_chat.py`) is a real Claude
+`POST /api/chat/messages` (`app/services/ai_chat.py`) is a real Gemini
 assistant — it is **not** part of the AI Decision Engine and never
 influences Market Score/Confidence/Direction/Risk, which stay fully
 deterministic. Each request:
@@ -212,12 +212,12 @@ deterministic. Each request:
 2. Sends that snapshot as system-prompt context, plus the conversation's
    prior turns (`history` in the request body — sessions live client-side
    only, see `store/chat-store.ts`, so the backend stays stateless), to
-   `ANTHROPIC_CHAT_MODEL` (default `claude-sonnet-5`).
-3. Returns the reply as-is. The system prompt explicitly tells Claude not
+   `GEMINI_MODEL` (default `gemini-2.0-flash`).
+3. Returns the reply as-is. The system prompt explicitly tells the model not
    to suggest placing any specific order.
 
-Set `ANTHROPIC_API_KEY` in `.env` to enable it (get one at
-[console.anthropic.com](https://console.anthropic.com/)). With no key set,
+Set `GEMINI_API_KEY` in `.env` to enable it (get one free, no card required,
+at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)). With no key set,
 the endpoint replies with a "not configured" message instead of erroring —
 same fail-open philosophy as the rest of the Data Engine.
 
@@ -281,7 +281,7 @@ app/intelligence/
     engine.py           compute_sentiment() — blends 5 categories
     liquidation_factor.py  real Binance liquidation data -> a FactorScore
   llm/
-    explanation.py      build_llm_explanation() — Claude, forced tool-use
+    explanation.py      build_llm_explanation() — Gemini, forced structured output
   scheduler/
     tasks.py             5 background loops, see app/main.py's lifespan
   cache/                 Redis key templates + TTLs for this layer
@@ -338,7 +338,7 @@ CryptoSlate for crypto; TechCrunch AI and VentureBeat AI for AI;
 TechCrunch and Wired for general innovation. Each article is classified
 once at ingest time by a **deterministic keyword classifier**
 (`classifier.py`) — not an LLM call per article: a poll cycle can pull
-dozens of articles across sources, and running each through Claude would
+dozens of articles across sources, and running each through an LLM would
 be slow and turn every poll into a pile of billed API calls for a rough
 directional read. The classifier produces:
 
@@ -442,9 +442,9 @@ all 5; `direction` is derived from `overall_score` the same
 deliberately narrow:
 
 - `direction`/`confidence` are copied straight from the Decision Engine /
-  Sentiment Engine — Claude is never asked for them and structurally
+  Sentiment Engine — the model is never asked for them and structurally
   can't override them (they aren't even fields in the tool schema below).
-- Claude is given the engine's own numbers/reasons as structured JSON and
+- The model is given the engine's own numbers/reasons as structured JSON and
   forced (via `tool_choice: {"type": "tool", "name": "emit_explanation"}`)
   to respond through a fixed schema — `summary`, `key_drivers`, `risks`,
   `opportunities`, `assets_affected`. It cannot free-associate a different
@@ -452,7 +452,7 @@ deliberately narrow:
   present in the input or suggesting a trade.
 - No key configured, or an upstream error, falls back to a clearly-labeled
   message plus the engine's own `reasons` as `key_drivers` — same
-  fail-open philosophy as `claude_chat.py`.
+  fail-open philosophy as `ai_chat.py`.
 
 ### Scheduler
 
@@ -472,7 +472,7 @@ crashing the loop:
 
 The LLM refresh only runs for one configurable "anchor" symbol (default
 `BTCUSDT`) — that's what feeds `/api/dashboard/intelligence`'s cached
-explanation without a Claude call on every dashboard poll.
+explanation without an AI call on every dashboard poll.
 `/api/llm/explanation/{symbol}` itself still computes live, for any
 symbol, on every request.
 
@@ -487,7 +487,7 @@ symbol, on every request.
 | `GET /api/news/search?q=&limit=` | Real, title/summary keyword search |
 | `GET /api/news/portal?topic=&limit=&offset=` | Real, DB-paginated listing for the public News Portal (see below) |
 | `GET /api/news/{id}` | Real, single article by id |
-| `GET /api/news/digest?topic=` | Real; reads the scheduler's latest AI-narrated digest for that topic (never calls Claude inline) |
+| `GET /api/news/digest?topic=` | Real; reads the scheduler's latest AI-narrated digest for that topic (never calls the AI model inline) |
 | `GET /api/whales/transactions?count=&asset=` | Real, most recent tracked transfers (ETH/LINK only) |
 | `GET /api/sentiment?symbol=&interval=` | Real, computes + persists on every call |
 | `GET /api/llm/explanation/{symbol}?interval=` | Real, computes + persists live |
@@ -507,14 +507,14 @@ Decision Engine.
   `category`.
 - **AI Digest**: `app/intelligence/llm/news_digest.py` narrates each
   topic's 15 most recent real articles into a short summary + highlights,
-  using the same discipline as the LLM Explanation Layer above — Claude
+  using the same discipline as the LLM Explanation Layer above — the model
   is given the real articles as structured facts and forced (via
   `tool_choice`) through a fixed JSON schema; the system prompt
   explicitly forbids inventing facts, numbers, or events not present in
   the input. Generated on a schedule (`run_news_digest_refresh`, hourly
   by default), not per request — `GET /api/news/digest` only ever reads
   the latest stored row, so the portal stays cheap to serve regardless of
-  traffic. No `ANTHROPIC_API_KEY` configured, or an upstream error, falls
+  traffic. No `GEMINI_API_KEY` configured, or an upstream error, falls
   back to a clearly-labeled message with a real `article_count` — never
   an exception.
 - **Access**: the portal is fully public. The terminal (everything under
@@ -558,7 +558,7 @@ the classifier above.
 
 `app/intelligence/llm/news_processing.py` narrates one article at a time
 into an original summary and extracts named entities — same discipline as
-the LLM Explanation Layer / News Digest above: Claude is given the
+the LLM Explanation Layer / News Digest above: the model is given the
 article's own title + RSS summary as the only facts, forced (via
 `tool_choice`) through a fixed JSON schema, system prompt explicitly
 forbids inventing anything not present in the input.
@@ -566,12 +566,12 @@ forbids inventing anything not present in the input.
 - **Runs on its own schedule** (`run_ai_news_processing`,
   `AI_PROCESSING_INTERVAL_SECONDS` — 15min default), not inline during
   RSS ingestion — same reasoning as the digest: a poll cycle can pull
-  dozens of articles, and blocking it on a Claude call per article would
+  dozens of articles, and blocking it on an AI call per article would
   make ingestion slow and expensive. Processes up to
   `AI_PROCESSING_BATCH_SIZE` (20) oldest-unprocessed articles
   (`NewsArticle.ai_summary IS NULL`) per cycle, so a backlog drains
   gradually rather than needing to catch up all at once.
-- **No-ops entirely** when `ANTHROPIC_API_KEY` isn't configured — no
+- **No-ops entirely** when `GEMINI_API_KEY` isn't configured — no
   batch fetch, no per-article log spam, checked once per cycle. A
   per-article upstream error still logs to `ai_processing_logs`
   (`app/models/ai_processing_log.py`) and moves on to the next article;
@@ -641,7 +641,7 @@ that silently found zero entries forever, rather than a visible error.
 ## News Platform: article translation (RU/KK)
 
 `ArticleTranslation` (`app/models/article_translation.py`) is a real
-Claude-translated title + summary for one article, one language —
+AI-translated title + summary for one article, one language —
 deliberately a separate table keyed on `article_id` rather than extra
 `title_ru`/`title_kk` columns or a duplicated `NewsArticle` row per
 language, per the platform spec's own "multilingual-ready... without
@@ -649,7 +649,7 @@ duplicating articles per language" guidance. Adding a third language
 later is a data migration, not a schema change.
 
 - `app/intelligence/llm/news_translation.py::build_news_translation` —
-  same anti-fabrication discipline as `news_processing.py` (Q4): Claude
+  same anti-fabrication discipline as `news_processing.py` (Q4): the model
   is given only the real ingested title/summary and a fixed JSON schema
   (`tool_choice`-forced), instructed to translate faithfully — never add,
   omit, or embellish. Currently RU and KK
@@ -658,7 +658,7 @@ later is a data migration, not a schema change.
   `ArticleTranslation` rows for PUBLISHED articles missing one, one
   language at a time, oldest-missing-first — same "drain the backlog
   gradually" shape as `run_ai_news_processing`. No-ops entirely without
-  `ANTHROPIC_API_KEY`.
+  `GEMINI_API_KEY`.
 - `GET /api/news/{portal,search,trending,{article_id}}` all accept
   `?lang=ru` or `?lang=kk` — when a translation exists for that article,
   the response's `title`/`summary` are the translated text; otherwise

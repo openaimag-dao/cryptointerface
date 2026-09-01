@@ -44,7 +44,7 @@ async def _translations_for(db: AsyncSession, articles: list[NewsArticle], lang:
 
 
 def to_news_item(article: NewsArticle, translation: ArticleTranslation | None = None) -> NewsItem:
-    """`translation`, when given, is a Claude-translated title/summary for
+    """`translation`, when given, is an AI-translated title/summary for
     this exact article (app/intelligence/llm/news_translation.py) — real
     translated text, swapped in for the originals. Absent (translation
     pipeline hasn't reached this article yet, or no language requested)
@@ -153,7 +153,7 @@ async def get_news_digest(
     db: AsyncSession = Depends(get_db),
 ) -> NewsDigestOut:
     """Reads the latest AI-narrated digest generated on a schedule by
-    `run_news_digest_refresh` — never calls Claude inline, so this stays
+    `run_news_digest_refresh` — never calls the AI model inline, so this stays
     cheap for a public portal page to poll. See
     app/intelligence/llm/news_digest.py."""
     if topic not in PORTAL_TOPICS:

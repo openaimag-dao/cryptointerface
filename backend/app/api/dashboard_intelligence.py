@@ -3,7 +3,7 @@ for why overall_score and sentiment_score are two different numbers.
 
 `ai_explanation` reads the scheduler's cached report for
 `LLM_EXPLANATION_ANCHOR_SYMBOL` (see app/intelligence/scheduler/tasks.py)
-rather than calling Claude inline, so this endpoint stays cheap enough
+rather than calling the AI model inline, so this endpoint stays cheap enough
 for the Dashboard to poll it directly.
 """
 

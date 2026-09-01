@@ -12,7 +12,7 @@ class NewsDigest(Base, IdMixin, CreatedAtMixin):
     app/intelligence/scheduler/tasks.py) from `app/intelligence/llm/
     news_digest.py`, not on-demand per request — same reasoning as
     `LlmReport`/the Dashboard Intelligence Card: a public portal page must
-    stay cheap to serve, so the Claude call happens on a schedule and the
+    stay cheap to serve, so the AI call happens on a schedule and the
     API only ever reads the latest stored row. `created_at` (from
     CreatedAtMixin) doubles as "generated at".
     """

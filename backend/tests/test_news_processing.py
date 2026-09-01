@@ -25,66 +25,18 @@ def _article() -> NewsArticle:
     return article
 
 
-class _FakeToolUseBlock:
-    def __init__(self, input_dict: dict) -> None:
-        self.type = "tool_use"
-        self.input = input_dict
+def _fake_generate_structured(calls: list[dict], reply: dict | None):
+    async def _generate_structured(**kwargs) -> dict | None:
+        calls.append(kwargs)
+        return reply
 
-
-class _FakeResponse:
-    def __init__(self, input_dict: dict) -> None:
-        self.content = [_FakeToolUseBlock(input_dict)]
-
-
-class _FakeMessages:
-    def __init__(self, calls: list[dict], reply: dict) -> None:
-        self._calls = calls
-        self._reply = reply
-
-    async def create(self, **kwargs) -> _FakeResponse:
-        self._calls.append(kwargs)
-        return _FakeResponse(self._reply)
-
-
-class _FakeAsyncAnthropic:
-    calls: list[dict] = []
-    reply: dict = {
-        "summary": "OpenAI released a new model with better reasoning.",
-        "entities": [{"name": "OpenAI", "type": "COMPANY"}],
-    }
-
-    def __init__(self, api_key: str) -> None:
-        self.api_key = api_key
-        self.messages = _FakeMessages(_FakeAsyncAnthropic.calls, _FakeAsyncAnthropic.reply)
-
-    async def close(self) -> None:
-        pass
-
-
-class _RaisingMessages:
-    async def create(self, **kwargs):
-        import anthropic
-        import httpx
-
-        raise anthropic.APIConnectionError(request=httpx.Request("POST", "https://api.anthropic.com/v1/messages"))
-
-
-class _RaisingAsyncAnthropic(_FakeAsyncAnthropic):
-    def __init__(self, api_key: str) -> None:
-        super().__init__(api_key)
-        self.messages = _RaisingMessages()
-
-
-@pytest.fixture(autouse=True)
-def _reset_fake_calls():
-    _FakeAsyncAnthropic.calls = []
-    yield
+    return _generate_structured
 
 
 @pytest.mark.asyncio
 async def test_build_news_processing_returns_none_without_api_key(monkeypatch):
     settings = get_settings()
-    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    monkeypatch.setattr(settings, "gemini_api_key", "")
 
     result = await build_news_processing(_article())
 
@@ -94,8 +46,13 @@ async def test_build_news_processing_returns_none_without_api_key(monkeypatch):
 @pytest.mark.asyncio
 async def test_build_news_processing_returns_summary_and_entities(monkeypatch):
     settings = get_settings()
-    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    monkeypatch.setattr(news_processing.anthropic, "AsyncAnthropic", _FakeAsyncAnthropic)
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    calls: list[dict] = []
+    reply = {
+        "summary": "OpenAI released a new model with better reasoning.",
+        "entities": [{"name": "OpenAI", "type": "COMPANY"}],
+    }
+    monkeypatch.setattr(news_processing, "generate_structured", _fake_generate_structured(calls, reply))
 
     result = await build_news_processing(_article())
 
@@ -104,20 +61,18 @@ async def test_build_news_processing_returns_summary_and_entities(monkeypatch):
     assert len(result.entities) == 1
     assert result.entities[0].name == "OpenAI"
     assert result.entities[0].entity_type == "COMPANY"
-
-    call = _FakeAsyncAnthropic.calls[0]
-    assert call["tool_choice"] == {"type": "tool", "name": "emit_processing"}
+    assert len(calls) == 1
 
 
 @pytest.mark.asyncio
 async def test_build_news_processing_filters_out_invalid_entity_types(monkeypatch):
     settings = get_settings()
-    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    _FakeAsyncAnthropic.reply = {
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    reply = {
         "summary": "Some summary.",
         "entities": [{"name": "OpenAI", "type": "COMPANY"}, {"name": "Bad", "type": "NOT_A_REAL_TYPE"}],
     }
-    monkeypatch.setattr(news_processing.anthropic, "AsyncAnthropic", _FakeAsyncAnthropic)
+    monkeypatch.setattr(news_processing, "generate_structured", _fake_generate_structured([], reply))
 
     result = await build_news_processing(_article())
 
@@ -129,8 +84,8 @@ async def test_build_news_processing_filters_out_invalid_entity_types(monkeypatc
 @pytest.mark.asyncio
 async def test_build_news_processing_returns_none_on_upstream_error(monkeypatch):
     settings = get_settings()
-    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    monkeypatch.setattr(news_processing.anthropic, "AsyncAnthropic", _RaisingAsyncAnthropic)
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(news_processing, "generate_structured", _fake_generate_structured([], None))
 
     result = await build_news_processing(_article())
 

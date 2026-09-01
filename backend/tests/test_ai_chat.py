@@ -1,8 +1,8 @@
 import pytest
 
 from app.core.config import get_settings
-from app.services import claude_chat
-from app.services.claude_chat import (
+from app.services import ai_chat
+from app.services.ai_chat import (
     NOT_CONFIGURED_MESSAGE,
     UPSTREAM_ERROR_MESSAGE,
     ChatTurn,
@@ -11,63 +11,18 @@ from app.services.claude_chat import (
 )
 
 
-class _FakeTextBlock:
-    def __init__(self, text: str) -> None:
-        self.type = "text"
-        self.text = text
+def _fake_generate_text(calls: list[dict], reply: str | None):
+    async def _generate_text(**kwargs) -> str | None:
+        calls.append(kwargs)
+        return reply
 
-
-class _FakeResponse:
-    def __init__(self, text: str) -> None:
-        self.content = [_FakeTextBlock(text)]
-
-
-class _FakeMessages:
-    def __init__(self, calls: list[dict], reply: str) -> None:
-        self._calls = calls
-        self._reply = reply
-
-    async def create(self, **kwargs) -> _FakeResponse:
-        self._calls.append(kwargs)
-        return _FakeResponse(self._reply)
-
-
-class _FakeAsyncAnthropic:
-    calls: list[dict] = []
-    reply = "Hello from Claude"
-
-    def __init__(self, api_key: str) -> None:
-        self.api_key = api_key
-        self.messages = _FakeMessages(_FakeAsyncAnthropic.calls, _FakeAsyncAnthropic.reply)
-
-    async def close(self) -> None:
-        pass
-
-
-class _RaisingAsyncAnthropic(_FakeAsyncAnthropic):
-    def __init__(self, api_key: str) -> None:
-        super().__init__(api_key)
-        self.messages = _RaisingMessages()
-
-
-class _RaisingMessages:
-    async def create(self, **kwargs):
-        import anthropic
-        import httpx
-
-        raise anthropic.APIConnectionError(request=httpx.Request("POST", "https://api.anthropic.com/v1/messages"))
-
-
-@pytest.fixture(autouse=True)
-def _reset_fake_calls():
-    _FakeAsyncAnthropic.calls = []
-    yield
+    return _generate_text
 
 
 @pytest.mark.asyncio
 async def test_send_chat_message_without_api_key_returns_not_configured(monkeypatch, db_session):
     settings = get_settings()
-    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    monkeypatch.setattr(settings, "gemini_api_key", "")
 
     result = await send_chat_message("What's the BTC price?", [])
 
@@ -77,29 +32,29 @@ async def test_send_chat_message_without_api_key_returns_not_configured(monkeypa
 @pytest.mark.asyncio
 async def test_send_chat_message_sends_history_and_returns_text(monkeypatch, db_session):
     settings = get_settings()
-    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    monkeypatch.setattr(claude_chat.anthropic, "AsyncAnthropic", _FakeAsyncAnthropic)
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    calls: list[dict] = []
+    monkeypatch.setattr(ai_chat, "generate_text", _fake_generate_text(calls, "Hello from Gemini"))
 
     history = [ChatTurn(role="user", content="hi"), ChatTurn(role="assistant", content="hello")]
     result = await send_chat_message("What's the BTC price?", history)
 
-    assert result == "Hello from Claude"
-    assert len(_FakeAsyncAnthropic.calls) == 1
-    call = _FakeAsyncAnthropic.calls[0]
+    assert result == "Hello from Gemini"
+    assert len(calls) == 1
+    call = calls[0]
     assert call["messages"] == [
         {"role": "user", "content": "hi"},
         {"role": "assistant", "content": "hello"},
         {"role": "user", "content": "What's the BTC price?"},
     ]
-    assert call["model"] == settings.anthropic_chat_model
-    assert "no live market data available" in call["system"].lower()
+    assert "no live market data available" in call["system_prompt"].lower()
 
 
 @pytest.mark.asyncio
 async def test_send_chat_message_handles_upstream_error_gracefully(monkeypatch, db_session):
     settings = get_settings()
-    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    monkeypatch.setattr(claude_chat.anthropic, "AsyncAnthropic", _RaisingAsyncAnthropic)
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(ai_chat, "generate_text", _fake_generate_text([], None))
 
     result = await send_chat_message("hello", [])
 

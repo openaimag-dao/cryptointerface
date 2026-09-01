@@ -29,57 +29,12 @@ async def _insert(db_session, *, url: str, title: str = "Title", topic: str = "A
     )
 
 
-class _FakeToolUseBlock:
-    def __init__(self, input_dict: dict) -> None:
-        self.type = "tool_use"
-        self.input = input_dict
+def _fake_generate_structured(calls: list[dict], reply: dict | None):
+    async def _generate_structured(**kwargs) -> dict | None:
+        calls.append(kwargs)
+        return reply
 
-
-class _FakeResponse:
-    def __init__(self, input_dict: dict) -> None:
-        self.content = [_FakeToolUseBlock(input_dict)]
-
-
-class _FakeMessages:
-    def __init__(self, calls: list[dict], reply: dict) -> None:
-        self._calls = calls
-        self._reply = reply
-
-    async def create(self, **kwargs) -> _FakeResponse:
-        self._calls.append(kwargs)
-        return _FakeResponse(self._reply)
-
-
-class _FakeAsyncAnthropic:
-    calls: list[dict] = []
-    reply: dict = {"summary": "AI is moving fast.", "highlights": ["Thing one happened", "Thing two happened"]}
-
-    def __init__(self, api_key: str) -> None:
-        self.api_key = api_key
-        self.messages = _FakeMessages(_FakeAsyncAnthropic.calls, _FakeAsyncAnthropic.reply)
-
-    async def close(self) -> None:
-        pass
-
-
-class _RaisingMessages:
-    async def create(self, **kwargs):
-        import anthropic
-        import httpx
-
-        raise anthropic.APIConnectionError(request=httpx.Request("POST", "https://api.anthropic.com/v1/messages"))
-
-
-class _RaisingAsyncAnthropic(_FakeAsyncAnthropic):
-    def __init__(self, api_key: str) -> None:
-        super().__init__(api_key)
-        self.messages = _RaisingMessages()
-
-
-@pytest.fixture(autouse=True)
-def _reset_fake_calls():
-    _FakeAsyncAnthropic.calls = []
-    yield
+    return _generate_structured
 
 
 @pytest.mark.asyncio
@@ -91,7 +46,7 @@ async def test_build_news_digest_returns_none_without_any_articles(db_session):
 @pytest.mark.asyncio
 async def test_build_news_digest_without_api_key_returns_fallback(monkeypatch, db_session):
     settings = get_settings()
-    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    monkeypatch.setattr(settings, "gemini_api_key", "")
     await _insert(db_session, url="https://example.com/a", topic="AI")
 
     result = await build_news_digest(db_session, "AI")
@@ -105,7 +60,7 @@ async def test_build_news_digest_without_api_key_returns_fallback(monkeypatch, d
 @pytest.mark.asyncio
 async def test_build_news_digest_only_considers_the_given_topic(monkeypatch, db_session):
     settings = get_settings()
-    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    monkeypatch.setattr(settings, "gemini_api_key", "")
     await _insert(db_session, url="https://example.com/ai", topic="AI")
     await _insert(db_session, url="https://example.com/crypto", topic="CRYPTO")
 
@@ -118,8 +73,10 @@ async def test_build_news_digest_only_considers_the_given_topic(monkeypatch, db_
 @pytest.mark.asyncio
 async def test_build_news_digest_success_returns_summary_and_highlights(monkeypatch, db_session):
     settings = get_settings()
-    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    monkeypatch.setattr(news_digest.anthropic, "AsyncAnthropic", _FakeAsyncAnthropic)
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    calls: list[dict] = []
+    reply = {"summary": "AI is moving fast.", "highlights": ["Thing one happened", "Thing two happened"]}
+    monkeypatch.setattr(news_digest, "generate_structured", _fake_generate_structured(calls, reply))
     await _insert(db_session, url="https://example.com/a", topic="AI")
     await _insert(db_session, url="https://example.com/b", topic="AI")
 
@@ -129,17 +86,14 @@ async def test_build_news_digest_success_returns_summary_and_highlights(monkeypa
     assert result.summary == "AI is moving fast."
     assert result.highlights == ["Thing one happened", "Thing two happened"]
     assert result.article_count == 2
-
-    call = _FakeAsyncAnthropic.calls[0]
-    assert call["tool_choice"] == {"type": "tool", "name": "emit_digest"}
-    assert call["model"] == settings.anthropic_chat_model
+    assert len(calls) == 1
 
 
 @pytest.mark.asyncio
 async def test_build_news_digest_handles_upstream_error_gracefully(monkeypatch, db_session):
     settings = get_settings()
-    monkeypatch.setattr(settings, "anthropic_api_key", "test-key")
-    monkeypatch.setattr(news_digest.anthropic, "AsyncAnthropic", _RaisingAsyncAnthropic)
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(news_digest, "generate_structured", _fake_generate_structured([], None))
     await _insert(db_session, url="https://example.com/a", topic="AI")
 
     result = await build_news_digest(db_session, "AI")

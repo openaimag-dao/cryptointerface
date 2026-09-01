@@ -90,7 +90,7 @@ async def run_sentiment_recompute(stop_event: asyncio.Event | None = None) -> No
 async def run_llm_explanation_refresh(stop_event: asyncio.Event | None = None) -> None:
     """Only refreshes `LLM_EXPLANATION_ANCHOR_SYMBOL` — this feeds the
     Dashboard Intelligence Card's cached "latest explanation" without
-    calling Claude on every dashboard poll. `/api/llm/explanation/{symbol}`
+    calling the AI model on every dashboard poll. `/api/llm/explanation/{symbol}`
     itself still computes live for whatever symbol is requested."""
     stop_event = stop_event or asyncio.Event()
     symbol = settings.llm_explanation_anchor_symbol
@@ -126,12 +126,12 @@ async def run_ai_news_processing(stop_event: asyncio.Event | None = None) -> Non
     """Backfills `NewsArticle.ai_summary` + entity links for recently-
     ingested articles, oldest-missing-first, `AI_PROCESSING_BATCH_SIZE`
     at a time. No-ops entirely (no batch fetch, no per-article logging)
-    when ANTHROPIC_API_KEY isn't configured — same fail-open shape as
+    when GEMINI_API_KEY isn't configured — same fail-open shape as
     every other Sprint 4 provider, just checked once per cycle instead of
     once per article to avoid log noise when the feature is simply off."""
     stop_event = stop_event or asyncio.Event()
     while not stop_event.is_set():
-        if not settings.anthropic_api_key:
+        if not settings.gemini_api_key:
             await _wait_or_stop(stop_event, settings.ai_processing_interval_seconds)
             continue
 
@@ -164,11 +164,11 @@ async def run_news_translation(stop_event: asyncio.Event | None = None) -> None:
     articles, one language at a time, `TRANSLATION_BATCH_SIZE` articles
     per language per cycle — same "drain the backlog gradually,
     oldest-missing-first" shape as `run_ai_news_processing`. No-ops
-    entirely when ANTHROPIC_API_KEY isn't configured, same fail-open
+    entirely when GEMINI_API_KEY isn't configured, same fail-open
     reasoning as every other optional-enrichment scheduler here."""
     stop_event = stop_event or asyncio.Event()
     while not stop_event.is_set():
-        if not settings.anthropic_api_key:
+        if not settings.gemini_api_key:
             await _wait_or_stop(stop_event, settings.translation_interval_seconds)
             continue
 

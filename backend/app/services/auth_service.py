@@ -1,6 +1,6 @@
 """Password hashing + JWT issuance/verification for real user accounts.
 
-Separate from every other "AI/Claude" service in this codebase — this is
+Separate from every other AI-powered service in this codebase — this is
 plain, deterministic security-critical code with zero LLM involvement.
 Fails closed (unlike this codebase's usual data-enrichment fail-open
 pattern) when `JWT_SECRET_KEY` isn't configured: an unconfigured secret
