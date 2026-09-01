@@ -16,17 +16,34 @@ from app.models.news import NewsArticle
 from app.utils.slug import simple_slugify
 
 
+def _normalize_entity_name(name: str) -> str:
+    """Capitalizes just the first character — fixes a lowercase LLM
+    extraction ("bitcoin" -> "Bitcoin") without mangling names that
+    already carry real internal casing ("OpenAI", "eBay", "PayPal"),
+    which `.title()`/`.capitalize()` would butcher."""
+    return name[:1].upper() + name[1:] if name else name
+
+
 async def get_or_create_entity(db: AsyncSession, name: str, entity_type: str) -> Entity:
     """Upserts on `slug`, so "Bitcoin" mentioned in 50 different articles
-    resolves to the same row every time rather than 50 duplicates."""
-    slug = simple_slugify(name)
-    stmt = (
-        pg_insert(Entity)
-        .values(name=name, slug=slug, entity_type=entity_type)
-        .on_conflict_do_nothing(index_elements=["slug"])
-    )
+    resolves to the same row every time rather than 50 duplicates. Also
+    self-heals a row's stored `name` casing on every later hit — an
+    already-created "bitcoin" (lowercase, from an earlier LLM extraction)
+    gets corrected to "Bitcoin" the next time this slug comes up, no
+    backfill migration needed. `entity_type` is intentionally left out of
+    the update: a later mis-classification of an already-correct entity
+    should never overwrite it."""
+    normalized = _normalize_entity_name(name)
+    slug = simple_slugify(normalized)
+    stmt = pg_insert(Entity).values(name=normalized, slug=slug, entity_type=entity_type)
+    stmt = stmt.on_conflict_do_update(index_elements=["slug"], set_={"name": stmt.excluded.name})
     await db.execute(stmt)
     await db.commit()
+    # The upsert above is a Core statement — it writes straight to the DB
+    # without the ORM identity map noticing, so a session that already
+    # holds this row in memory (e.g. from an earlier query this request)
+    # would otherwise hand back its stale `name` below.
+    db.expire_all()
 
     result = await db.execute(select(Entity).where(Entity.slug == slug))
     return result.scalars().one()
