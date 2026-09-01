@@ -4,9 +4,11 @@ import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/common/page-header";
 import { DigestCard } from "@/components/portal/digest-card";
+import { FearGreedWidget } from "@/components/portal/fear-greed-widget";
 import { HeadlineListWidget } from "@/components/portal/headline-list-widget";
 import { MarketMoversWidget } from "@/components/portal/market-movers-widget";
 import { MarketSnapshotWidget } from "@/components/portal/market-snapshot-widget";
+import { MiniHeatmapWidget } from "@/components/portal/mini-heatmap-widget";
 import { PortalNewsCard } from "@/components/portal/news-card";
 import { PortalPagination } from "@/components/portal/pagination";
 import { parsePageParam } from "@/lib/pagination";
@@ -95,12 +97,14 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
                 seeAllLabel={t.homeSeeAll}
               />
             ))}
+            <FearGreedWidget indicators={macroIndicators} lang={lang} />
             <MarketMoversWidget
               assets={marketAssets}
               title={t.marketMovers}
               gainersLabel={t.topGainers}
               losersLabel={t.topLosers}
             />
+            <MiniHeatmapWidget assets={marketAssets} title={t.heatmapTitle} />
             <MarketSnapshotWidget indicators={macroIndicators} title={t.marketSnapshot} lang={lang} />
           </aside>
         ) : null}

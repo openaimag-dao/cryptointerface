@@ -39,9 +39,14 @@ export default async function PortalLayout({ children }: { children: ReactNode }
               {t.navTerminal}
             </Link>
             {session ? (
-              <Link href="/account" className="transition-colors hover:text-foreground">
-                {t.navAccount}
-              </Link>
+              <>
+                <Link href="/bookmarks" className="transition-colors hover:text-foreground">
+                  {t.navSaved}
+                </Link>
+                <Link href="/account" className="transition-colors hover:text-foreground">
+                  {t.navAccount}
+                </Link>
+              </>
             ) : (
               <Link href="/login" className="transition-colors hover:text-foreground">
                 {t.navSignIn}

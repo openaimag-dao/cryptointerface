@@ -72,6 +72,13 @@ export function PortalNewsCard({ news, featured, lang = "en" }: PortalNewsCardPr
               </Badge>
             </Link>
           ))}
+          {news.entities.map((entity) => (
+            <Link key={entity.slug} href={`/tag/${entity.slug}`}>
+              <Badge variant="outline" className="transition-colors hover:border-accent hover:text-accent">
+                {entity.name}
+              </Badge>
+            </Link>
+          ))}
         </div>
 
         <div className="mt-4 text-xs text-muted-foreground">{timeAgo(news.publishedAt, lang)}</div>

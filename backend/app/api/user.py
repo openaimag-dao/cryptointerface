@@ -13,6 +13,7 @@ from app.api.news import to_news_item
 from app.database.session import get_db
 from app.models.user import User
 from app.schemas.user_dashboard import SavedArticlesOut, WatchlistAddRequest, WatchlistOut
+from app.services.entity_repository import get_entities_for_articles
 from app.services.news_repository import get_article_by_id
 from app.services.saved_article_repository import list_saved_articles, save_article, unsave_article
 from app.services.watchlist_repository import add_watchlist_symbol, list_watchlist_symbols, remove_watchlist_symbol
@@ -27,7 +28,8 @@ async def get_bookmarks(
     user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ) -> SavedArticlesOut:
     articles = await list_saved_articles(db, user.id)
-    return SavedArticlesOut(items=[to_news_item(a) for a in articles])
+    entities = await get_entities_for_articles(db, [a.id for a in articles])
+    return SavedArticlesOut(items=[to_news_item(a, entities=entities.get(a.id)) for a in articles])
 
 
 @router.post("/bookmarks/{article_id}", status_code=status.HTTP_204_NO_CONTENT)

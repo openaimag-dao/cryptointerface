@@ -9,6 +9,18 @@ import type { Sentiment } from "./market";
  */
 export type PortalTopic = "CRYPTO" | "AI" | "BLOCKCHAIN" | "INNOVATION";
 
+/**
+ * One AI-extracted named thing (company/person/cryptocurrency/protocol/
+ * country/technology) an article mentions — see backend/app/models/
+ * entity.py. `slug` links to its /tag/{slug} archive page. Absent/empty
+ * until the AI News Processing pipeline reaches an article.
+ */
+export interface EntityTag {
+  name: string;
+  slug: string;
+  entityType: "COMPANY" | "PERSON" | "CRYPTOCURRENCY" | "PROTOCOL" | "COUNTRY" | "TECHNOLOGY";
+}
+
 export interface NewsItem {
   id: string;
   source: string;
@@ -24,9 +36,18 @@ export interface NewsItem {
   portalTopic: PortalTopic | null;
   aiSummary: string | null;
   imageUrl: string | null;
+  entities: EntityTag[];
 }
 
 export interface PortalNewsPage {
+  items: NewsItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface EntityNewsPage {
+  entity: EntityTag;
   items: NewsItem[];
   total: number;
   limit: number;

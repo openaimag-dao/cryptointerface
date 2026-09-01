@@ -3,13 +3,16 @@ people, cryptocurrencies, protocols, countries, technologies) AI News
 Processing extracts per article (see app/intelligence/llm/news_processing.py).
 """
 
-from sqlalchemy import select
+from collections import defaultdict
+
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.intelligence.llm.news_processing import ExtractedEntity
 from app.models.article_associations import ArticleEntity
 from app.models.entity import Entity
+from app.models.news import NewsArticle
 from app.utils.slug import simple_slugify
 
 
@@ -49,3 +52,49 @@ async def get_entities_for_article(db: AsyncSession, article_id: int) -> list[En
     )
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_entities_for_articles(db: AsyncSession, article_ids: list[int]) -> dict[int, list[Entity]]:
+    """Bulk lookup for a page of articles — one query instead of N, keyed
+    by article_id — same shape as get_translations_for_articles
+    (article_translation_repository.py)."""
+    if not article_ids:
+        return {}
+    stmt = (
+        select(ArticleEntity.article_id, Entity)
+        .join(Entity, Entity.id == ArticleEntity.entity_id)
+        .where(ArticleEntity.article_id.in_(article_ids))
+    )
+    result = await db.execute(stmt)
+    by_article: dict[int, list[Entity]] = defaultdict(list)
+    for article_id, entity in result.all():
+        by_article[article_id].append(entity)
+    return dict(by_article)
+
+
+async def get_entity_by_slug(db: AsyncSession, slug: str) -> Entity | None:
+    result = await db.execute(select(Entity).where(Entity.slug == slug))
+    return result.scalars().one_or_none()
+
+
+async def get_articles_for_entity(
+    db: AsyncSession, entity_id: int, limit: int = 20, offset: int = 0
+) -> tuple[list[NewsArticle], int]:
+    """Paginated PUBLISHED-only listing for one AI-extracted entity's tag
+    archive page — real DB-level pagination, same shape as
+    news_repository.py::get_portal_news_page."""
+    base_stmt = (
+        select(NewsArticle)
+        .join(ArticleEntity, ArticleEntity.article_id == NewsArticle.id)
+        .where(ArticleEntity.entity_id == entity_id, NewsArticle.editorial_status == "PUBLISHED")
+    )
+    count_stmt = (
+        select(func.count())
+        .select_from(NewsArticle)
+        .join(ArticleEntity, ArticleEntity.article_id == NewsArticle.id)
+        .where(ArticleEntity.entity_id == entity_id, NewsArticle.editorial_status == "PUBLISHED")
+    )
+    total = (await db.execute(count_stmt)).scalar_one()
+    stmt = base_stmt.order_by(NewsArticle.published_at.desc()).limit(limit).offset(offset)
+    result = await db.execute(stmt)
+    return list(result.scalars().all()), total

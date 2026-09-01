@@ -80,10 +80,19 @@ while living in the same app:
 
 | Route | Access |
 |---|---|
-| `/`, `/category/{crypto,ai,blockchain,innovation}`, `/article/{id}`, `/search`, `/trending` | Public |
+| `/`, `/category/{crypto,ai,blockchain,innovation}`, `/article/{id}`, `/search`, `/trending`, `/tag/{slug}` | Public |
 | `/login`, `/register` | Public |
+| `/bookmarks` (portal saved-articles page) | Public route, self-redirects to `/login?next=/bookmarks` without a session — not in `middleware.ts`'s matcher, since the portal never hard-gates a whole route the way the terminal does |
 | `/dashboard`, `/markets`, `/assets/{symbol}`, `/ai-chat`, `/portfolio`, `/signals`, `/backtesting`, `/liquidations`, `/macro`, `/news`, `/sentiment`, `/settings`, `/whales`, `/saved`, `/watchlist`, `/account` | Requires a logged-in session |
 | `/admin/news`, `/admin/sources`, `/admin/monitoring` | Requires a logged-in session with `role="admin"` |
+
+`/tag/{slug}` is the archive page for one AI-extracted entity (company,
+person, cryptocurrency, protocol, country, or technology — see backend/
+README.md's "News Platform: AI processing" section) — every PUBLISHED
+article that mentions it, newest first. `/bookmarks` is the portal's own
+saved-articles page, distinct from the terminal's `/saved`: same backend
+data (`GET /api/user/bookmarks`), but reachable without terminal access,
+for a reader who only ever registered through the public portal.
 
 `middleware.ts` verifies the same JWT the backend issues on
 register/login (`lib/session.ts`, via the `jose` library so it works in

@@ -19,6 +19,7 @@ function makeItem(id: number): NewsItem {
     portalTopic: "CRYPTO",
     aiSummary: null,
     imageUrl: null,
+    entities: [],
   };
 }
 

@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api-client";
-import type { NewsDigest, NewsItem, PortalNewsPage, PortalTopic } from "@/types";
+import type { EntityNewsPage, NewsDigest, NewsItem, PortalNewsPage, PortalTopic } from "@/types";
 import type { PortalLanguage } from "@/lib/portal-i18n";
 
 function withLang(params: URLSearchParams, lang?: PortalLanguage): URLSearchParams {
@@ -72,6 +72,20 @@ export async function fetchTrendingNews(topic?: PortalTopic, limit = 20, lang?: 
 export async function fetchNewsDigest(topic: PortalTopic): Promise<NewsDigest | null> {
   try {
     return await apiFetch<NewsDigest>(`/api/news/digest?topic=${topic}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchTagNews(
+  slug: string,
+  limit = 20,
+  offset = 0,
+  lang?: PortalLanguage,
+): Promise<EntityNewsPage | null> {
+  try {
+    const params = withLang(new URLSearchParams({ limit: String(limit), offset: String(offset) }), lang);
+    return await apiFetch<EntityNewsPage>(`/api/news/tag/${encodeURIComponent(slug)}?${params.toString()}`);
   } catch {
     return null;
   }
