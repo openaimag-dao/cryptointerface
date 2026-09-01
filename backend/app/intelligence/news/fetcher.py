@@ -74,9 +74,16 @@ def _entry_image_url(entry: object) -> str | None:
 
 
 def _clean_summary(raw_html: str) -> str:
-    """RSS summaries are often raw HTML — strip tags for plain text."""
+    """RSS summaries are often raw HTML — strip tags for plain text.
+
+    Truncated at 2000 chars to match `NewsArticle.summary`'s column width
+    (`models/news.py`) exactly — not a smaller, arbitrary cutoff. This is
+    still only whatever excerpt/teaser the source's own feed provides
+    (never the full article — see that module's docstring for why we
+    don't have that), just no longer discarding the back half of a
+    longer one than most feeds send."""
     text = _TAG_RE.sub(" ", raw_html)
-    return _WHITESPACE_RE.sub(" ", text).strip()[:1000]
+    return _WHITESPACE_RE.sub(" ", text).strip()[:2000]
 
 
 async def fetch_source(source: NewsSourceDef, timeout: float = 10.0) -> list[RawNewsEntry]:

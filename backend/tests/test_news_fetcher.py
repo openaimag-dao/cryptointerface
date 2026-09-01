@@ -134,3 +134,44 @@ async def test_fetch_source_returns_empty_list_on_http_error(monkeypatch):
     entries = await fetch_source(source)
 
     assert entries == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_source_keeps_up_to_2000_chars_of_a_long_description(monkeypatch):
+    """Regression test: a source that sends a longer excerpt than most
+    feeds do must not get silently chopped down to an arbitrarily smaller
+    limit — 2000 is NewsArticle.summary's actual column width
+    (models/news.py), not a made-up smaller cutoff."""
+    long_description = "word " * 500  # 2500 raw chars, well past the old 1000-char cutoff
+    rss = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+  <title>Test Feed</title>
+  <item>
+    <title>A story with an unusually long RSS excerpt</title>
+    <description>{long_description}</description>
+    <link>https://example.com/long-summary</link>
+    <pubDate>Mon, 01 Jan 2024 12:00:00 GMT</pubDate>
+  </item>
+</channel>
+</rss>
+""".encode()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=rss)
+
+    original_client_cls = httpx.AsyncClient
+
+    def fake_async_client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return original_client_cls(*args, **kwargs)
+
+    import app.intelligence.news.fetcher as fetcher_module
+
+    monkeypatch.setattr(fetcher_module.httpx, "AsyncClient", fake_async_client)
+
+    source = NewsSourceDef(id="test", name="Test Source", rss_url="https://example.com/rss")
+    entries = await fetch_source(source)
+
+    assert len(entries) == 1
+    assert len(entries[0].summary) == 2000
